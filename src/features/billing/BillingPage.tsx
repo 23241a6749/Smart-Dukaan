@@ -374,8 +374,14 @@ export const BillingPage: React.FC = () => {
         setOtpLoading(true);
 
         try {
-            await billApi.sendKhataOtp(selectedCustomer.phoneNumber);
+            const res = await billApi.sendKhataOtp(selectedCustomer.phoneNumber);
             addToast('Verification code sent to customer', 'success');
+
+            // DEMO MODE: Auto-fill and show the OTP if Twilio is delayed or fails
+            if (res.data?.demoOtp) {
+                setOtp(res.data.demoOtp);
+                addToast(`[DEMO] OTP auto-filled: ${res.data.demoOtp}`, 'info');
+            }
         } catch (err: any) {
             addToast(err.response?.data?.message || 'Failed to send OTP', 'error');
             setShowStatusModal(false);

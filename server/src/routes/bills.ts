@@ -155,20 +155,37 @@ router.post('/khata/send-otp', auth, async (req, res) => {
             console.log(`[Twilio] Sending OTP via ${isWhatsApp ? 'WhatsApp' : 'SMS'} to ${to} from ${from}...`);
             try {
                 await twilioClient.messages.create({
-                    body: `[KLink] Your OTP for Khata payment is: ${otp}. Valid for 5 mins.`,
+                    body: `Your KiranaLink code is ${otp}`, // Pre-approved Sandbox Template pattern
                     from: from,
                     to: to
                 });
                 console.log('[Twilio] OTP sent successfully');
             } catch (twilioErr: any) {
                 console.error('[Twilio] Error:', twilioErr.message);
-                // Don't throw here, just log it so the response can still be sent (though OTP failed)
+                // Fallback attempt with normal SMS if WhatsApp fails
+                try {
+                    const fromSms = process.env.TWILIO_PHONE_NUMBER?.replace('whatsapp:', '');
+                    if (fromSms) {
+                        await twilioClient.messages.create({
+                            body: `Your KiranaLink OTP is: ${otp}`,
+                            from: fromSms,
+                            to: `+91${cleanPhone}`
+                        });
+                        console.log('[Twilio] Fallback SMS sent successfully');
+                    }
+                } catch (e) {
+                    console.error('[Twilio Fallback] Error:', e);
+                }
             }
         } else {
             console.log(`[MOCK OTP] Phone: ${customerPhoneNumber}, OTP: ${otp}`);
         }
 
-        res.json({ message: 'OTP sent' });
+        const isDemo = process.env.DEMO_MODE === 'true';
+        res.json({
+            message: 'OTP sent',
+            ...(isDemo && { demoOtp: otp }) // Include OTP in payload for zero-fail hackathon demo
+        });
     } catch (err: any) {
         res.status(500).json({ message: 'Failed to send OTP' });
     }

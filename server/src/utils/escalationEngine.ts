@@ -25,6 +25,14 @@ export function evaluateEscalation(invoice: IInvoice): EscalationResult {
         return defaultResult;
     }
 
+    if (invoice.last_contacted_at) {
+        const timeSinceContact = now.getTime() - new Date(invoice.last_contacted_at).getTime();
+        // Prevent autonomous double-calls. In demo mode, wait at least 2 minutes between contacts.
+        if (DEMO_MODE && timeSinceContact < 120000) {
+            return defaultResult;
+        }
+    }
+
     const timeDifferenceMs = now.getTime() - dueDate.getTime();
 
     // DEMO: use MINUTES as unit (so Level 1 triggers instantly, Level 3 in ~2 min)

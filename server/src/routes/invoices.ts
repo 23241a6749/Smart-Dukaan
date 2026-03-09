@@ -4,6 +4,9 @@ import { CustomerAccount } from '../models/CustomerAccount.js';
 import { auth } from '../middleware/auth.js';
 import { sendNotification, sendGenericMessage } from '../services/communicationService.js';
 import { generateMessage } from '../services/messageGenerator.js';
+import { Customer } from '../models/Customer.js';
+import { LedgerEntry } from '../models/LedgerEntry.js';
+import { recalculateGlobalKhataScore } from '../utils/khataScore.js';
 
 export const invoiceRouter = Router();
 
@@ -61,9 +64,14 @@ invoiceRouter.post('/import-khata', auth, async (req, res) => {
                 });
                 await invoice.save();
                 importedCount++;
+
+                await invoice.save();
+                importedCount++;
             }
 
-            // ── IMMEDIATELY SEND WHATSAPP ──
+            // ── ALWAYS IMMEDIATELY SEND WHATSAPP & CALL ON BUTTON CLICK ──
+            // We removed the 'if (!invoice)' skip logic here because the user wants a forced demonstration.
+            // The autonomous scheduler is now blocked from double-calling by 'timeSinceContact' logic in Escalation Engine.
             try {
                 const waMessage = `Hello ${invoice.client_name}! 🙏\n\nThis is a friendly reminder from your KiranaLink store.\n\nYou have a pending balance of *₹${invoice.amount}*.\n\nPlease pay at your earliest convenience.\n\n- KiranaLink AI Agent`;
                 const waStatus = await sendGenericMessage(customer.phoneNumber, waMessage, 'whatsapp');
@@ -172,6 +180,44 @@ invoiceRouter.put('/:id/payment', async (req, res) => {
             { new: true }
         );
         if (!invoice) { res.status(404).json({ error: 'Invoice not found' }); return; }
+
+        // ── AUTO-RESOLVE KHATA BALANCE & KHATA SCORE ──
+        try {
+            const cleanPhone = invoice.client_phone.replace('whatsapp:', '').replace('+', '\\+').slice(-10);
+            const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(cleanPhone + '$') } });
+
+            if (customer) {
+                // Find Khata accounts to deduct from
+                const accounts = await CustomerAccount.find({ customerId: customer._id, balance: { $gt: 0 } });
+                let remainingPayment = invoice.amount;
+
+                for (const account of accounts) {
+                    if (remainingPayment <= 0) break;
+                    const deduct = Math.min(account.balance, remainingPayment);
+                    account.balance -= deduct;
+                    remainingPayment -= deduct;
+                    await account.save();
+
+                    // Create Ledger Entry for the resolution
+                    const entry = new LedgerEntry({
+                        shopkeeperId: account.shopkeeperId,
+                        customerId: customer._id,
+                        amount: deduct,
+                        type: 'credit',
+                        paymentMode: 'auto-resolve',
+                        status: 'settled'
+                    });
+                    await entry.save();
+                }
+
+                // Recalculate Khata Score
+                await recalculateGlobalKhataScore(customer._id.toString());
+                console.log(`[AutoResolve] Reduced Khata balance by ₹${invoice.amount} and recalculated Khata Score for ${customer.name || customer.phoneNumber}`);
+            }
+        } catch (khataError) {
+            console.error('[AutoResolve] Khata Sync Error:', khataError);
+        }
+
         res.json(invoice);
     } catch (error) {
         res.status(500).json({ error: 'Failed to record payment' });

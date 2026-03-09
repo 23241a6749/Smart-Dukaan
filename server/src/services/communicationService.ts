@@ -74,9 +74,12 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
                 .replace(/\r/g, '')
                 .trim();
 
-            // Simple Say + Hangup — no webhook needed, works without tunnel
+            // Interactive AI Agent: Uses <Gather> to listen for customer speech and bounce to our Webhook
+            const backendUrl = process.env.BACKEND_URL || '';
+            const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Gather input="speech" action="${backendUrl}/api/invoices/webhook/voice" method="POST" timeout="5" speechTimeout="auto" language="en-IN" enhanced="true" speechModel="phone_call"><Say voice="alice" language="en-IN">${safeMessage}</Say></Gather><Say voice="alice" language="en-IN">I did not hear anything from you. Goodbye.</Say><Hangup/></Response>`;
+
             await twilioClient.calls.create({
-                twiml: `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">${safeMessage}</Say><Pause length="3"/><Say voice="alice" language="en-IN">Thank you. Goodbye.</Say><Hangup/></Response>`,
+                twiml: twiml,
                 to: toNumCall,
                 from: voiceNumber
             });

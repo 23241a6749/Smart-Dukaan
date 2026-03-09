@@ -62,7 +62,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         const saved = localStorage.getItem(`translations_${language}`);
         return saved ? JSON.parse(saved) : {};
     });
-    const [isTranslating, setIsTranslating] = useState(false);
+    const [isTranslating] = useState(false);
 
     // Persist language
     useEffect(() => {
