@@ -49,7 +49,7 @@ export default function AuthPage() {
     };
 
     const handleGoogleLogin = () => {
-        window.location.href = 'http://localhost:5000/api/auth/google';
+        window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5001/api'}/auth/google`;
     };
 
     return (

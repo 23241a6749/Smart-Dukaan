@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Store, Users, Package, TrendingUp, CreditCard, Menu, X, Gift, BookOpen, LogOut, Phone, MessageSquare, FileText, Activity } from 'lucide-react';
+import { Store, Users, Package, TrendingUp, CreditCard, Menu, X, Gift, BookOpen, LogOut, Phone, MessageCircle, FileText, Activity } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -33,11 +33,11 @@ export const MainLayout: React.FC = () => {
         { path: '/', label: translate('Billing'), icon: Store },
         { path: '/products', label: translate('Products'), icon: Package },
         { path: '/customers', label: translate('Customers'), icon: Users },
+        { path: '/whatsapp', label: translate('WhatsApp Desk'), icon: MessageCircle },
         { path: '/deals', label: translate('Group Buy'), icon: Gift },
         { path: '/supplier-bills', label: translate('Supplier Bills'), icon: FileText },
         { path: '/chaser', label: translate('Voice Auto-Pilot'), icon: Activity },
         { path: '/recovery', label: translate('Legacy Agent'), icon: Phone },
-        { path: '/whatsapp', label: translate('Reminders'), icon: MessageSquare },
         { path: '/khata', label: translate('Khata'), icon: CreditCard },
         { path: '/records', label: translate('Records'), icon: BookOpen },
         { path: '/analytics', label: translate('Analytics'), icon: TrendingUp },

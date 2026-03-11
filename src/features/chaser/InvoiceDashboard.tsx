@@ -25,6 +25,8 @@ export interface Invoice {
     reminder_level: number;
     last_contacted_at: string | null;
     reminder_history: ReplyHistory[];
+    promised_date?: string | null;
+    ai_confidence?: number;
 }
 
 export default function InvoiceDashboard() {
@@ -84,13 +86,21 @@ export default function InvoiceDashboard() {
     const disputedCount = invoices.filter(i => i.status === 'disputed').length;
     const recoveredInvoices = invoices.filter(i => i.status === 'paid').length;
     const totalAmountRecovered = invoices.filter(i => i.status === 'paid').reduce((acc, cv) => acc + cv.amount, 0);
+    const queuedToday = invoices.filter(i => ['overdue', 'unpaid', 'promised'].includes(i.status)).length;
+    const avgConfidence = invoices.length
+        ? Math.round((invoices.reduce((acc, cv) => acc + (cv.ai_confidence || 0), 0) / invoices.length) * 100)
+        : 0;
+    const upcoming = invoices
+        .filter(i => i.status === 'promised')
+        .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+        .slice(0, 3);
 
     return (
         <div className="min-h-screen pb-24 text-gray-900 dark:text-gray-100 flex flex-col gap-8">
             {/* Header Hero */}
-            <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-indigo-600 via-purple-700 to-indigo-900 p-8 shadow-2xl border border-white/10 shrink-0">
+            <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-emerald-700 via-teal-700 to-slate-900 p-8 shadow-2xl border border-white/10 shrink-0">
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-purple-500/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/4 pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-amber-500/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/4 pointer-events-none" />
 
                 <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div className="space-y-2">
@@ -105,7 +115,7 @@ export default function InvoiceDashboard() {
                             <Bot className="h-10 w-10 text-emerald-300" />
                             Voice Auto-Pilot
                         </h1>
-                        <p className="text-indigo-100 font-medium text-lg max-w-xl">
+                        <p className="text-emerald-100 font-medium text-lg max-w-xl">
                             Autonomous debt recovery. The AI actively calls customers, negotiates natively, and resolves pending payments while you sleep.
                         </p>
                     </div>
@@ -113,16 +123,39 @@ export default function InvoiceDashboard() {
                     <button
                         onClick={handleStartDemo}
                         disabled={demoLoading}
-                        className="group relative overflow-hidden bg-white hover:bg-gray-50 text-indigo-900 px-8 py-4 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.3)] font-black flex items-center gap-3 transition-all hover:scale-105 active:scale-95 disabled:opacity-70 disabled:hover:scale-100 shrink-0"
+                        className="group relative overflow-hidden bg-white hover:bg-gray-50 text-emerald-900 px-8 py-4 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.3)] font-black flex items-center gap-3 transition-all hover:scale-105 active:scale-95 disabled:opacity-70 disabled:hover:scale-100 shrink-0"
                     >
                         {demoLoading ? (
-                            <RefreshCw className="h-6 w-6 animate-spin text-indigo-600" />
+                            <RefreshCw className="h-6 w-6 animate-spin text-emerald-600" />
                         ) : (
-                            <Activity className="h-6 w-6 text-indigo-600 group-hover:animate-bounce" />
+                            <Activity className="h-6 w-6 text-emerald-600 group-hover:animate-bounce" />
                         )}
                         <span className="text-lg">Sync Overdue Khata</span>
                         <div className="absolute inset-0 border-2 border-white/20 rounded-2xl scale-105 opacity-0 group-hover:scale-100 group-hover:opacity-100 transition-all pointer-events-none" />
                     </button>
+                </div>
+
+                <div className="relative z-10 mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-md">
+                        <p className="text-xs uppercase tracking-widest text-emerald-100 font-bold">Queue Health</p>
+                        <p className="text-2xl font-black text-white mt-1">{queuedToday} active targets</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-md">
+                        <p className="text-xs uppercase tracking-widest text-emerald-100 font-bold">Voice Understanding</p>
+                        <p className="text-2xl font-black text-white mt-1">{avgConfidence}% avg confidence</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-md">
+                        <p className="text-xs uppercase tracking-widest text-emerald-100 font-bold">Next Promises</p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                            {upcoming.length === 0 ? (
+                                <span className="text-sm text-emerald-100">No upcoming promises</span>
+                            ) : upcoming.map((item) => (
+                                <span key={item.invoice_id} className="text-xs bg-white/20 text-white px-2.5 py-1 rounded-full font-semibold">
+                                    {item.client_name} · {new Date(item.due_date).toLocaleDateString('en-IN')}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -181,6 +214,7 @@ export default function InvoiceDashboard() {
                                     <th className="px-8 py-5 rounded-tl-2xl">Target</th>
                                     <th className="px-8 py-5">Amount</th>
                                     <th className="px-8 py-5">AI Status</th>
+                                    <th className="px-8 py-5">Next Follow-up</th>
                                     <th className="px-8 py-5 text-center">Escalation</th>
                                     <th className="px-8 py-5">Action</th>
                                     <th className="px-8 py-5 rounded-tr-2xl text-right">Logs</th>
@@ -228,6 +262,11 @@ export default function InvoiceDashboard() {
                                                         </span>
                                                     </td>
                                                     <td className="px-8 py-5">
+                                                        <span className="inline-flex px-3 py-1.5 rounded-full text-xs font-bold bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-200">
+                                                            {inv.status === 'promised' ? new Date(inv.due_date).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'Immediate'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-8 py-5">
                                                         <div className="flex items-center justify-center gap-1.5">
                                                             {[1, 2, 3, 4].map((level) => (
                                                                 <div key={level} className={`h-2.5 w-8 rounded-full transition-all duration-500 ${inv.reminder_level >= level ?
@@ -263,7 +302,7 @@ export default function InvoiceDashboard() {
                                                             exit={{ opacity: 0, height: 0 }}
                                                             className="bg-indigo-50/50 dark:bg-indigo-900/10 border-b border-gray-100 dark:border-white/5"
                                                         >
-                                                            <td colSpan={6} className="px-8 py-6">
+                                                            <td colSpan={7} className="px-8 py-6">
                                                                 <div className="pl-14">
                                                                     <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                                                                         <MessageSquare className="h-4 w-4" /> Agent Interaction Logs

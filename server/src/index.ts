@@ -52,6 +52,13 @@ app.use((req: any, res, next) => {
     next();
 });
 
+app.use((req, _res, next) => {
+    if (req.path.startsWith('/api/whatsapp')) {
+        console.log(`[WA DEBUG] ${req.method} ${req.path}`);
+    }
+    next();
+});
+
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/products', productRouter);
@@ -79,7 +86,7 @@ mongoose.connect(process.env.MONGODB_URI!)
         startInvoiceScheduler();
 
         httpServer.listen(Number(PORT), '0.0.0.0', () => {
-            console.log(`Server (ShopOS) is running on port ${PORT}`);
+            console.log(`Server (ShopOS) is running on port ${PORT} [pid=${process.pid}]`);
         });
     })
     .catch((err) => {

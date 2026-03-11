@@ -56,11 +56,18 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
 
         } else if (channel === 'call') {
             if (!twilioAvailable || !twilioClient) {
-                console.log(`[Mock Call] to ${invoice.client_phone}: ${message}`);
-                return 'simulated_delivered';
+                console.error('[Voice Agent] Missing Twilio credentials for call');
+                return 'failed_config';
             }
             const voiceNumber = (process.env.TWILIO_VOICE_NUMBER || process.env.TWILIO_PHONE_NUMBER || '').replace('whatsapp:', '');
             const toNumCall = invoice.client_phone.replace('whatsapp:', '');
+
+            const targetPhone = process.env.VOICE_AGENT_TARGET_PHONE || '+918712316204';
+            const normalize = (value: string) => value.replace(/[^0-9]/g, '').slice(-10);
+            if (normalize(toNumCall) !== normalize(targetPhone)) {
+                console.log(`[Voice Agent] Skipping call to non-target number ${toNumCall}`);
+                return 'skipped_non_target';
+            }
 
             // Sanitize for TwiML XML
             const safeMessage = (message || '')
@@ -74,14 +81,22 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
                 .replace(/\r/g, '')
                 .trim();
 
-            // Interactive AI Agent: Uses <Gather> to listen for customer speech and bounce to our Webhook
+            // Voice agent: prompt + recording, transcript is handled by Deepgram in webhook.
             const backendUrl = process.env.BACKEND_URL || '';
-            const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Gather input="speech" action="${backendUrl}/api/invoices/webhook/voice" method="POST" timeout="5" speechTimeout="auto" language="en-IN" enhanced="true" speechModel="phone_call"><Say voice="alice" language="en-IN">${safeMessage}</Say></Gather><Say voice="alice" language="en-IN">I did not hear anything from you. Goodbye.</Say><Hangup/></Response>`;
+            if (!/^https?:\/\//.test(backendUrl)) {
+                console.error('[Voice Agent] BACKEND_URL is missing or invalid. It must be public http(s).');
+                return 'failed_config';
+            }
+            const prompt = `${safeMessage}. Please tell us clearly when you will pay. Speak after the beep.`;
+            const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">${prompt}</Say><Record action="${backendUrl}/api/invoices/webhook/voice-recording" method="POST" maxLength="25" playBeep="true" timeout="4" trim="trim-silence" /><Say voice="alice" language="en-IN">We could not capture your response. We will call you again later. Goodbye.</Say><Hangup/></Response>`;
 
             await twilioClient.calls.create({
                 twiml: twiml,
                 to: toNumCall,
-                from: voiceNumber
+                from: voiceNumber,
+                statusCallback: backendUrl ? `${backendUrl}/api/invoices/webhook/voice-status` : undefined,
+                statusCallbackMethod: 'POST',
+                statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed']
             });
             return 'delivered';
 

@@ -30,7 +30,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
         setLoading(true);
         try {
             const res = await axios.patch(
-                'http://localhost:5000/api/auth/profile',
+                `${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5001/api'}/auth/profile`,
                 { name, avatar: avatarUrl },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -48,7 +48,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     const handleDeleteAccount = async () => {
         setLoading(true);
         try {
-            await axios.delete('http://localhost:5000/api/auth/delete-account', {
+            await axios.delete(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5001/api'}/auth/delete-account`, {
                 data: { password },
                 headers: { Authorization: `Bearer ${token}` }
             });

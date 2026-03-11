@@ -105,6 +105,25 @@ async function createBillInternal(session: mongoose.ClientSession, data: any, us
     return bill;
 }
 
+function buildWhatsAppBillMessage(customerName: string, bill: any) {
+    const itemLines = (bill.items || [])
+        .map((item: any) => `- ${item.name} x ${item.quantity} = Rs.${(item.price * item.quantity).toFixed(0)}`)
+        .join('\n');
+
+    return [
+        `Namaste ${customerName || 'Customer'},`,
+        '',
+        'Your bill has been generated:',
+        itemLines,
+        '',
+        `Total: Rs.${Number(bill.totalAmount || 0).toFixed(0)}`,
+        `Payment Type: ${bill.paymentType}`,
+        `Date: ${new Date(bill.createdAt).toLocaleString('en-IN')}`,
+        '',
+        '- KiranaLink'
+    ].join('\n');
+}
+
 // Create a new bill (Cash/Online)
 router.post('/', auth, async (req, res) => {
     const session = await mongoose.startSession();
@@ -313,6 +332,58 @@ router.get('/', auth, async (req, res) => {
         res.json(bills);
     } catch (err: any) {
         res.status(500).json({ message: err.message });
+    }
+});
+
+router.post('/:id/send-whatsapp', auth, async (req, res) => {
+    try {
+        if (!req.auth?.userId) {
+            res.status(401).json({ message: 'Authentication required' });
+            return;
+        }
+
+        const bill = await Bill.findOne({ _id: req.params.id, shopkeeperId: req.auth.userId })
+            .populate('customerId', 'name phoneNumber whatsappLastInboundAt');
+
+        if (!bill) {
+            res.status(404).json({ message: 'Bill not found' });
+            return;
+        }
+
+        const customer = bill.customerId as any;
+        if (!customer?.phoneNumber) {
+            res.status(400).json({ message: 'Customer phone number missing' });
+            return;
+        }
+
+        const lastInboundAt = customer.whatsappLastInboundAt ? new Date(customer.whatsappLastInboundAt).getTime() : 0;
+        const in24hWindow = lastInboundAt > 0 && (Date.now() - lastInboundAt) <= (24 * 60 * 60 * 1000);
+
+        if (!in24hWindow) {
+            res.status(400).json({
+                message: 'Customer is outside WhatsApp 24h free window. Ask customer to send any WhatsApp message first, then retry.',
+                requires24hWindow: true
+            });
+            return;
+        }
+
+        const to = `whatsapp:${String(customer.phoneNumber).startsWith('+91') ? customer.phoneNumber : `+91${String(customer.phoneNumber).replace(/\D/g, '').slice(-10)}`}`;
+        const from = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+        const body = buildWhatsAppBillMessage(customer.name || 'Customer', bill);
+
+        await twilioClient.messages.create({
+            from,
+            to,
+            body
+        });
+
+        res.json({
+            success: true,
+            message: 'Bill sent on WhatsApp within 24h window'
+        });
+    } catch (err: any) {
+        console.error('send-whatsapp bill error:', err);
+        res.status(500).json({ message: err.message || 'Failed to send bill on WhatsApp' });
     }
 });
 

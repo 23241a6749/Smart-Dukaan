@@ -75,6 +75,14 @@ export default function RecoveryPage() {
         if (result.status === 'success') {
             addToast(`✅ Promise recorded: ${result.promiseDate}`, 'success');
             loadCustomers();
+            return;
+        }
+
+        if (result.status === 'initiated') {
+            addToast('📞 Voice call initiated. Agent will auto-update dues from customer response.', 'success');
+            window.setTimeout(() => loadCustomers(), 6000);
+            window.setTimeout(() => loadCustomers(), 15000);
+            window.setTimeout(() => loadCustomers(), 30000);
         }
     };
 

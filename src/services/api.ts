@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5001/api';
 
 const api = axios.create({
     baseURL: API_BASE_URL,
@@ -24,6 +24,39 @@ export interface Customer {
     khataScore?: number;
     khataLimit?: number;
     isLocal?: boolean;
+}
+
+export interface WhatsAppOrderItem {
+    productId: string;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    lineTotal: number;
+}
+
+export interface WhatsAppOrder {
+    _id: string;
+    customerPhone: string;
+    customerMessage: string;
+    parsedText?: string;
+    mediaUrl?: string;
+    referenceCode?: string;
+    reviewState?: 'none' | 'needs_manual_review' | 'awaiting_customer_choice';
+    reviewReason?: string;
+    autoDecisionReason?: string;
+    resolutionSource?: 'auto' | 'customer_choice' | 'shopkeeper_edit';
+    channel: 'whatsapp_text' | 'whatsapp_audio';
+    status: 'received' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+    items: WhatsAppOrderItem[];
+    totalAmount: number;
+    convertedBillId?: string;
+    convertedAt?: string;
+    createdAt: string;
+    customerId?: {
+        _id: string;
+        name?: string;
+        phoneNumber?: string;
+    };
 }
 
 export const authApi = {
@@ -66,6 +99,7 @@ export const billApi = {
         razorpay_signature: string;
         billData: { customerPhoneNumber: string; items: Array<{ productId: string; quantity: number; price: number }> };
     }) => api.post('/bills/razorpay/verify-payment', data),
+    sendBillOnWhatsApp: (billId: string) => api.post(`/bills/${billId}/send-whatsapp`),
 };
 
 export const ledgerApi = {
@@ -96,7 +130,21 @@ export const invoiceApi = {
     getOverdueInvoices: () => api.get('/invoices/overdue'),
     createDemoInvoice: (data: any) => api.post('/invoices', data),
     markInvoicePaid: (id: string) => api.put(`/invoices/${id}/payment`),
-    importKhataDues: () => api.post('/invoices/import-khata')
+    importKhataDues: () => api.post('/invoices/import-khata'),
+    recoverNow: (customerId: string) => api.post(`/invoices/recover-now/${customerId}`),
+    getRecoveryState: (invoiceId: string, since?: string) =>
+        api.get(`/invoices/recovery-state/${invoiceId}`, { params: since ? { since } : undefined }),
+};
+
+export const whatsappApi = {
+    getAnalytics: () => api.get('/whatsapp/analytics'),
+    broadcastReminders: () => api.post('/whatsapp/broadcast-reminders'),
+    getOrders: () => api.get<WhatsAppOrder[]>('/whatsapp/orders'),
+    updateOrderStatus: (id: string, status: WhatsAppOrder['status']) => api.patch(`/whatsapp/orders/${id}/status`, { status }),
+    updateOrderItems: (id: string, items: Array<{ productId: string; quantity: number }>) =>
+        api.patch(`/whatsapp/orders/${id}/items`, { items }),
+    fetchOrderMedia: (id: string) => api.get(`/whatsapp/orders/${id}/media`, { responseType: 'blob' }),
+    convertOrderToBill: (id: string) => api.post(`/whatsapp/orders/${id}/convert-to-bill`, {}),
 };
 
 export default api;

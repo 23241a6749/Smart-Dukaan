@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MessageSquare, Bell, Zap, ShoppingBag, CreditCard, Activity } from 'lucide-react';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5001';
 
 interface WhatsappEvent {
     type: string;

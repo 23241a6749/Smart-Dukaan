@@ -15,6 +15,16 @@ const customerSchema = new mongoose.Schema({
     visitValidation: { type: Number, default: 0 },
     loyaltyPoints: { type: Number, default: 0 },
     totalPurchases: { type: Number, default: 0 },
+    preferredLanguage: { type: String, default: 'en' },
+    whatsappLastInboundAt: { type: Date },
+    whatsappPendingSelection: {
+        alias: { type: String },
+        quantity: { type: Number },
+        optionProductIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
+        orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'WhatsAppOrder' },
+        referenceCode: { type: String },
+        requestedAt: { type: Date },
+    },
 }, { timestamps: true });
 
 export const Customer = mongoose.model('Customer', customerSchema);

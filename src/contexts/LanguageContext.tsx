@@ -99,7 +99,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
             const token = localStorage.getItem('token');
             if (!token) return;
 
-            const res = await axios.post('http://localhost:5000/api/ai/translate', {
+            const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5001/api'}/ai/translate`, {
                 text,
                 targetLanguage: targetLang
             }, {

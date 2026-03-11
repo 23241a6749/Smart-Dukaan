@@ -10,6 +10,12 @@ import { recalculateGlobalKhataScore } from '../utils/khataScore.js';
 
 export const invoiceRouter = Router();
 
+function isVoiceTargetPhone(phone: string): boolean {
+    const target = process.env.VOICE_AGENT_TARGET_PHONE || '+918712316204';
+    const normalize = (value: string) => value.replace(/[^0-9]/g, '').slice(-10);
+    return normalize(phone) === normalize(target);
+}
+
 // Create new invoice
 invoiceRouter.post('/', async (req, res) => {
     try {
@@ -64,10 +70,15 @@ invoiceRouter.post('/import-khata', auth, async (req, res) => {
                 });
                 await invoice.save();
                 importedCount++;
-
-                await invoice.save();
-                importedCount++;
             }
+
+            await Customer.findByIdAndUpdate(customer._id, {
+                $set: {
+                    nextCallDate: Date.now(),
+                    recoveryStatus: 'Call Again',
+                    recoveryNotes: 'Synced into auto-recovery pipeline.'
+                }
+            });
 
             // ── ALWAYS IMMEDIATELY SEND WHATSAPP & CALL ON BUTTON CLICK ──
             // We removed the 'if (!invoice)' skip logic here because the user wants a forced demonstration.
@@ -221,5 +232,135 @@ invoiceRouter.put('/:id/payment', async (req, res) => {
         res.json(invoice);
     } catch (error) {
         res.status(500).json({ error: 'Failed to record payment' });
+    }
+});
+
+invoiceRouter.get('/recovery-state/:invoiceId', auth, async (req: Request, res: Response) => {
+    try {
+        const invoice = await Invoice.findOne({ invoice_id: req.params.invoiceId });
+        if (!invoice) {
+            res.status(404).json({ message: 'Invoice not found' });
+            return;
+        }
+
+        const last10 = invoice.client_phone.replace(/[^0-9]/g, '').slice(-10);
+        const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } });
+
+        const sinceRaw = String(req.query?.since || '');
+        const sinceDate = sinceRaw ? new Date(sinceRaw) : null;
+        const hasValidSince = Boolean(sinceDate && !Number.isNaN(sinceDate.getTime()));
+
+        const latestVoiceHistory = [...invoice.reminder_history]
+            .reverse()
+            .find((entry) => entry.channel === 'voice_call');
+
+        const latestTranscriptHistory = [...invoice.reminder_history]
+            .reverse()
+            .find((entry) => entry.channel === 'voice_call' && entry.message_content?.includes('[Deepgram]:'));
+
+        const hasTranscript = Boolean(latestTranscriptHistory);
+        const hasTranscriptSince = hasValidSince
+            ? invoice.reminder_history.some((entry) =>
+                entry.channel === 'voice_call'
+                && entry.message_content?.includes('[Deepgram]:')
+                && new Date(entry.timestamp).getTime() >= (sinceDate as Date).getTime()
+            )
+            : hasTranscript;
+
+        res.json({
+            invoiceId: invoice.invoice_id,
+            invoiceStatus: invoice.status,
+            lastIntent: invoice.last_intent,
+            aiConfidence: invoice.ai_confidence,
+            promisedDate: invoice.promised_date,
+            nextRetryAt: invoice.next_retry_at,
+            hasTranscript,
+            hasTranscriptSince,
+            latestVoiceLog: latestVoiceHistory?.message_content || null,
+            latestTranscriptLog: latestTranscriptHistory?.message_content || null,
+            latestVoiceAt: latestVoiceHistory?.timestamp || null,
+            latestTranscriptAt: latestTranscriptHistory?.timestamp || null,
+            customerRecoveryStatus: customer?.recoveryStatus || null,
+            customerNextCallDate: customer?.nextCallDate || null,
+            customerRecoveryNotes: customer?.recoveryNotes || null,
+        });
+    } catch (error) {
+        console.error('recovery-state error:', error);
+        res.status(500).json({ message: 'Failed to fetch recovery state' });
+    }
+});
+
+invoiceRouter.post('/recover-now/:customerId', auth, async (req: Request, res: Response) => {
+    try {
+        const customer = await Customer.findById(req.params.customerId);
+        if (!customer) {
+            res.status(404).json({ message: 'Customer not found' });
+            return;
+        }
+
+        if (!isVoiceTargetPhone(customer.phoneNumber || '')) {
+            res.status(400).json({
+                message: `Voice demo is restricted to target number ${(process.env.VOICE_AGENT_TARGET_PHONE || '+918712316204')}.`,
+            });
+            return;
+        }
+
+        const accounts = await CustomerAccount.find({
+            customerId: customer._id,
+            shopkeeperId: req.auth?.userId,
+            balance: { $gt: 0 }
+        });
+
+        const pending = accounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
+        if (pending <= 0) {
+            res.status(400).json({ message: 'No pending khata for this customer' });
+            return;
+        }
+
+        const last10 = customer.phoneNumber.replace(/[^0-9]/g, '').slice(-10);
+        const existingInvoice = await Invoice.findOne({
+            client_phone: { $regex: new RegExp(`${last10}$`) },
+            status: { $in: ['unpaid', 'overdue', 'promised', 'disputed'] }
+        });
+
+        const invoice = existingInvoice || new Invoice({
+            invoice_id: `KHATA-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            client_name: customer.name || 'Valued Customer',
+            client_email: `${(customer.name || 'user').replace(/\s/g, '').toLowerCase()}@example.com`,
+            client_phone: customer.phoneNumber,
+            amount: pending,
+            due_date: new Date(Date.now() - 60 * 1000),
+            status: 'overdue',
+            reminder_level: 2
+        });
+
+        invoice.amount = pending;
+        invoice.status = 'overdue';
+        const callMessage = await generateMessage(invoice, 'urgent reminder', 'call');
+        const callStatus = await sendNotification(invoice, callMessage, 'call');
+        invoice.last_contacted_at = new Date();
+        invoice.reminder_history.push({
+            timestamp: new Date(),
+            channel: 'call',
+            message_content: callMessage,
+            delivery_status: callStatus
+        });
+        await invoice.save();
+
+        await Customer.findByIdAndUpdate(customer._id, {
+            $set: {
+                recoveryStatus: callStatus === 'delivered' ? 'Busy' : 'Call Again',
+                recoveryNotes: `Manual recovery call triggered (${callStatus})`
+            }
+        });
+
+        res.json({
+            message: 'Recovery call initiated',
+            invoiceId: invoice.invoice_id,
+            callStatus
+        });
+    } catch (error) {
+        console.error('recover-now error:', error);
+        res.status(500).json({ message: 'Failed to trigger recovery call' });
     }
 });

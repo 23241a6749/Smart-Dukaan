@@ -19,6 +19,11 @@ export interface IInvoice extends Document {
     last_contacted_at: Date | null;
     payment_link: string;
     reminder_history: IReminderHistory[];
+    promised_date: Date | null;
+    next_retry_at: Date | null;
+    last_intent: string;
+    ai_confidence: number;
+    no_speech_count: number;
 }
 
 const ReminderHistorySchema = new Schema<IReminderHistory>({
@@ -40,6 +45,11 @@ const InvoiceSchema = new Schema<IInvoice>({
     last_contacted_at: { type: Date, default: null },
     payment_link: { type: String, default: '' },
     reminder_history: [ReminderHistorySchema],
+    promised_date: { type: Date, default: null },
+    next_retry_at: { type: Date, default: null },
+    last_intent: { type: String, default: 'UNKNOWN' },
+    ai_confidence: { type: Number, default: 0 },
+    no_speech_count: { type: Number, default: 0 },
 }, { timestamps: true });
 
 // Note: last_contacted_at updates should be handled within API controllers where reminder_history is modified to avoid complex Mongoose 9 typings issues.

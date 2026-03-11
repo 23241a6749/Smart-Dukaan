@@ -8,7 +8,7 @@ import type { Customer } from '../../services/api';
 import { db } from '../../db/db';
 import type { Customer as LocalCustomer } from '../../db/db';
 import { recalculateKhataScore, SCORE_DEFAULT, calculateKhataLimit, getKhataStatus, type KhataExplanation } from '../../lib/khataLogic';
-import { Search, User, Phone, X, ChevronRight, Minus, Plus, Trash2, Award, Download, Share2 } from 'lucide-react';
+import { Search, User, Phone, X, ChevronRight, Minus, Plus, Trash2, Award, Download, Share2, MessageCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -34,6 +34,8 @@ export const BillingPage: React.FC = () => {
     const [otp, setOtp] = useState('');
     const [showOtpInput, setShowOtpInput] = useState(false);
     const [otpLoading, setOtpLoading] = useState(false);
+    const [latestBillId, setLatestBillId] = useState<string | null>(null);
+    const [sendingBillWhatsApp, setSendingBillWhatsApp] = useState(false);
 
     // Customer identification states
     const [customerInput, setCustomerInput] = useState('');
@@ -178,11 +180,12 @@ export const BillingPage: React.FC = () => {
 
         try {
             // 1. Server Call
-            await billApi.create({
+            const billRes = await billApi.create({
                 customerPhoneNumber: selectedCustomer.phoneNumber,
                 items: cart.map(i => ({ productId: i._id!, quantity: i.quantity, price: i.price })),
                 paymentType: method
             });
+            setLatestBillId(billRes.data?._id || null);
 
             // 2. Local Dexie Sync & Scroring Logic
             if (method === 'ledger') {
@@ -291,7 +294,7 @@ export const BillingPage: React.FC = () => {
                     }) => {
                         try {
                             // ── Step 3: Verify payment signature on server ──────
-                            await billApi.verifyRazorpayPayment({
+                            const verifyRes = await billApi.verifyRazorpayPayment({
                                 razorpay_order_id: response.razorpay_order_id,
                                 razorpay_payment_id: response.razorpay_payment_id,
                                 razorpay_signature: response.razorpay_signature,
@@ -304,6 +307,7 @@ export const BillingPage: React.FC = () => {
                                     })),
                                 },
                             });
+                            setLatestBillId(verifyRes.data?.bill?._id || null);
 
                             // ── Step 4: Sync local Dexie DB (same as cash path) ─
                             await db.ledger.add({
@@ -402,11 +406,12 @@ export const BillingPage: React.FC = () => {
                 items: cart.map(i => ({ productId: i._id!, quantity: i.quantity, price: i.price })),
             };
 
-            await billApi.verifyKhataOtp({
+            const verifyOtpRes = await billApi.verifyKhataOtp({
                 customerPhoneNumber: selectedCustomer.phoneNumber,
                 otp,
                 billData
             });
+            setLatestBillId(verifyOtpRes.data?._id || null);
 
             // If OTP verification succeeds, the bill is created.
             // We need to sync local DB as well (ledger logic)
@@ -540,6 +545,23 @@ export const BillingPage: React.FC = () => {
         closeCheckout();
     };
 
+    const handleSendBillOnWhatsApp = async () => {
+        if (!latestBillId) {
+            addToast('Bill not available to send', 'error');
+            return;
+        }
+
+        try {
+            setSendingBillWhatsApp(true);
+            await billApi.sendBillOnWhatsApp(latestBillId);
+            addToast('Bill sent to customer on WhatsApp', 'success');
+        } catch (err: any) {
+            addToast(err.response?.data?.message || 'Failed to send bill on WhatsApp', 'error');
+        } finally {
+            setSendingBillWhatsApp(false);
+        }
+    };
+
     const closeCheckout = () => {
         setShowCheckout(false);
         setCheckoutStep('SUMMARY');
@@ -553,6 +575,8 @@ export const BillingPage: React.FC = () => {
         setAnimationType(null);
         setOtp('');
         setShowOtpInput(false);
+        setLatestBillId(null);
+        setSendingBillWhatsApp(false);
     };
 
     return (
@@ -1277,7 +1301,7 @@ export const BillingPage: React.FC = () => {
                                         <div className="text-[10px] text-gray-400 font-bold mt-1 uppercase">Total Amount Paid</div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-3 mt-6">
+                                    <div className="grid grid-cols-3 gap-3 mt-6">
                                         <button
                                             onClick={handleDownloadPDF}
                                             className="flex flex-col items-center justify-center gap-1 p-3 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
@@ -1291,6 +1315,16 @@ export const BillingPage: React.FC = () => {
                                         >
                                             <Share2 size={20} className="text-gray-700 dark:text-white" />
                                             <span className="text-xs font-bold text-gray-700 dark:text-white">Share PDF</span>
+                                        </button>
+                                        <button
+                                            onClick={handleSendBillOnWhatsApp}
+                                            disabled={!latestBillId || sendingBillWhatsApp}
+                                            className="flex flex-col items-center justify-center gap-1 p-3 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors disabled:opacity-50"
+                                        >
+                                            <MessageCircle size={20} className="text-emerald-700 dark:text-emerald-300" />
+                                            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                                                {sendingBillWhatsApp ? 'Sending...' : 'Send WhatsApp'}
+                                            </span>
                                         </button>
                                     </div>
 
