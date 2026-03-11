@@ -157,6 +157,16 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
                 const response = await invoiceApi.getRecoveryState(activeInvoiceId, sessionStartedAtIso || undefined);
                 const state = response.data;
 
+                if (state.negotiationStage) {
+                    const partialText = state.negotiationPartialAmountNow
+                        ? ` | Partial now: ₹${state.negotiationPartialAmountNow}`
+                        : '';
+                    const remainingText = typeof state.negotiationRemainingAmount === 'number'
+                        ? ` | Remaining: ₹${state.negotiationRemainingAmount}`
+                        : '';
+                    setInsight(`Stage: ${state.negotiationStage} | Turns: ${state.negotiationTurns || 0}${partialText}${remainingText}`);
+                }
+
                 if (state.latestTranscriptLog) {
                     setTranscript((prev) => {
                         const exists = prev.some((entry) => entry.text === state.latestTranscriptLog);
@@ -165,9 +175,9 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
                     });
                 }
 
-                if (state.hasTranscriptSince) {
+                if (state.negotiationStatus === 'completed' || state.hasTranscriptSince) {
                     setStatus('completed');
-                    setInsight(`Call processed. Intent: ${state.lastIntent || 'UNKNOWN'} | Status: ${state.invoiceStatus || 'updated'}`);
+                    setInsight(state.negotiationSummary || `Call processed. Intent: ${state.lastIntent || 'UNKNOWN'} | Status: ${state.invoiceStatus || 'updated'}`);
                     setLastUpdate(new Date().toLocaleTimeString());
                     onResultRef.current({
                         status: 'success',

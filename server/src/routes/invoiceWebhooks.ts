@@ -5,6 +5,7 @@ import { classifyIntent, classifyIntentAndPromise, Intent } from '../services/in
 import { sendGenericMessage } from '../services/communicationService.js';
 import { appendToHistory, getHistory, clearHistory } from '../services/conversationMemory.js';
 import { Customer } from '../models/Customer.js';
+import { VoiceCallSession } from '../models/VoiceCallSession.js';
 import OpenAI from 'openai';
 import { transcribeAudioWithDeepgram } from '../services/deepgram.js';
 
@@ -63,6 +64,42 @@ async function sendWhatsAppFollowUp(invoice: any, promisedDate?: Date | null) {
     }
 }
 
+async function sendWhatsAppSettlementFollowUp(args: {
+    invoice: any;
+    partialAmountNow: number;
+    remainingAmount: number;
+    promisedDate: Date | null;
+}) {
+    const { invoice, partialAmountNow, remainingAmount, promisedDate } = args;
+
+    try {
+        const dueDateText = promisedDate ? promisedDate.toLocaleDateString('en-IN') : 'the promised date';
+        const immediateAmount = Math.max(0, Math.round(partialAmountNow));
+        const upiAmount = immediateAmount > 0 ? immediateAmount : Math.round(invoice.amount);
+        const upiUrl = `upi://pay?pa=kiranalink@oksbi&pn=KiranaLink&am=${upiAmount}&cu=INR`;
+
+        const summary = immediateAmount > 0
+            ? `Plan confirmed: pay *Rs.${immediateAmount} now* and *Rs.${remainingAmount}* by *${dueDateText}*.`
+            : `Plan confirmed: pay full amount *Rs.${remainingAmount}* by *${dueDateText}*.`;
+
+        const message = `Hi ${invoice.client_name},\n\n${summary}\n\nPay now using this UPI link:\n${upiUrl}\n\n- KiranaLink Recovery Agent`;
+        const status = await sendGenericMessage(invoice.client_phone, message, 'whatsapp');
+
+        if (status === 'delivered' || status === 'simulated_delivered') {
+            console.log(`[Agent] Settlement follow-up sent to ${invoice.client_name} (${status})`);
+        } else {
+            console.warn(`[Agent] Settlement follow-up not delivered for ${invoice.client_name} (${status})`);
+        }
+    } catch (error) {
+        console.error('[Agent] Settlement follow-up failed:', error);
+    }
+}
+
+function buildRecordFollowupTwiml(text: string, backendUrl: string): string {
+    const safe = sanitizeForTwiml(text);
+    return `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">${safe}</Say><Record action="${backendUrl}/api/invoices/webhook/voice-recording" method="POST" maxLength="25" playBeep="true" timeout="4" trim="trim-silence" /><Say voice="alice" language="en-IN">We could not hear your response clearly. We will follow up later. Goodbye.</Say><Hangup/></Response>`;
+}
+
 function fallbackRetryDate(hours = 4): Date {
     const retry = new Date();
     retry.setHours(retry.getHours() + hours);
@@ -106,6 +143,145 @@ async function findInvoiceByCallParties(from: string, to: string) {
     });
 
     return invoice;
+}
+
+type NegotiationIntent = Intent | 'PARTIAL_PAYMENT' | 'REFUSAL';
+
+type NegotiationExtraction = {
+    intent: NegotiationIntent;
+    confidence: number;
+    promisedDateISO: string | null;
+    partialAmountNow: number | null;
+    wantsPartialPlan: boolean | null;
+    customerConfirmed: boolean;
+    nextBestQuestion: string;
+};
+
+function clampCurrency(value: number, maxAmount: number): number {
+    const rounded = Math.round(value);
+    if (!Number.isFinite(rounded)) return 0;
+    if (rounded < 0) return 0;
+    if (rounded > maxAmount) return maxAmount;
+    return rounded;
+}
+
+function parsePromisedDateFromISO(iso: string | null): Date | null {
+    if (!iso) return null;
+    const parsed = new Date(iso);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed;
+}
+
+function detectAffirmative(text: string): boolean {
+    return /(yes|haan|ha|okay|ok|sure|done|confirm|correct)/i.test(text);
+}
+
+function detectNegative(text: string): boolean {
+    return /(no|nahi|cannot|cant|not possible|impossible)/i.test(text);
+}
+
+function detectImmediateFullPayment(text: string): boolean {
+    return /(full payment|pay full|pay all|entire amount|complete amount|settle now|pay now|today itself|right now|aaj hi|abhi pay|abhi de dunga|abhi de dungi)/i.test(text);
+}
+
+function parseAmountFallback(text: string, maxAmount: number): number | null {
+    const amountMatch = text.match(/(?:rs\.?|rupees?)?\s*(\d{2,6})/i);
+    if (!amountMatch || !amountMatch[1]) return null;
+    const amount = Number.parseInt(amountMatch[1], 10);
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+    return clampCurrency(amount, maxAmount);
+}
+
+async function extractNegotiationTurn(args: {
+    invoiceAmount: number;
+    stage: string;
+    transcript: string;
+    existingPartialAmount: number;
+    existingPromisedDate: Date | null;
+}): Promise<NegotiationExtraction> {
+    const { invoiceAmount, stage, transcript, existingPartialAmount, existingPromisedDate } = args;
+
+    const fallbackIntentAnalysis = await classifyIntentAndPromise(transcript);
+    const fallbackAmount = parseAmountFallback(transcript, invoiceAmount);
+    const fallback: NegotiationExtraction = {
+        intent: fallbackAmount && fallbackAmount > 0 ? 'PARTIAL_PAYMENT' : fallbackIntentAnalysis.intent,
+        confidence: fallbackIntentAnalysis.confidence,
+        promisedDateISO: fallbackIntentAnalysis.promisedDate ? fallbackIntentAnalysis.promisedDate.toISOString() : existingPromisedDate?.toISOString() || null,
+        partialAmountNow: fallbackAmount,
+        wantsPartialPlan: detectAffirmative(transcript) ? true : detectNegative(transcript) ? false : null,
+        customerConfirmed: detectAffirmative(transcript),
+        nextBestQuestion: 'Could you confirm how much you can pay now and by which date you will pay the rest?',
+    };
+
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'dummy_key_for_build') {
+        return fallback;
+    }
+
+    try {
+        const isOR = (process.env.OPENAI_API_KEY || '').startsWith('sk-or');
+        const openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+            ...(isOR ? { baseURL: 'https://openrouter.ai/api/v1' } : {})
+        });
+
+        const systemPrompt = `You are a strict extraction engine for debt recovery voice negotiation.
+Return ONLY JSON with keys:
+intent, confidence, promisedDateISO, partialAmountNow, wantsPartialPlan, customerConfirmed, nextBestQuestion.
+
+intent must be one of: PAYMENT_PROMISED, EXTENSION_REQUESTED, DISPUTE, PARTIAL_PAYMENT, REFUSAL, UNKNOWN.
+Use PARTIAL_PAYMENT when customer states an immediate amount.
+If customer agrees to pay something now but no amount, set wantsPartialPlan=true and partialAmountNow=null.
+Set customerConfirmed=true only when customer clearly confirms previous plan.
+Keep nextBestQuestion short and practical for kirana collection calls.`;
+
+        const userPrompt = JSON.stringify({
+            stage,
+            transcript,
+            invoiceAmount,
+            existingPartialAmount,
+            existingPromisedDate: existingPromisedDate?.toISOString() || null,
+        });
+
+        const response = await openai.chat.completions.create({
+            model: isOR ? 'openai/gpt-4o-mini' : 'gpt-4o-mini',
+            temperature: 0.1,
+            max_tokens: 180,
+            response_format: { type: 'json_object' },
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt },
+            ],
+        });
+
+        const raw = response.choices[0]?.message?.content?.trim() || '{}';
+        const parsed = JSON.parse(raw) as Partial<NegotiationExtraction>;
+
+        const allowedIntents: NegotiationIntent[] = ['PAYMENT_PROMISED', 'EXTENSION_REQUESTED', 'DISPUTE', 'PARTIAL_PAYMENT', 'REFUSAL', 'UNKNOWN'];
+        const intent = parsed.intent && allowedIntents.includes(parsed.intent as NegotiationIntent)
+            ? parsed.intent as NegotiationIntent
+            : fallback.intent;
+        const confidence = typeof parsed.confidence === 'number'
+            ? Math.max(0, Math.min(1, parsed.confidence))
+            : fallback.confidence;
+        const partialAmountNow = typeof parsed.partialAmountNow === 'number'
+            ? clampCurrency(parsed.partialAmountNow, invoiceAmount)
+            : fallback.partialAmountNow;
+
+        return {
+            intent,
+            confidence,
+            promisedDateISO: typeof parsed.promisedDateISO === 'string' ? parsed.promisedDateISO : fallback.promisedDateISO,
+            partialAmountNow,
+            wantsPartialPlan: typeof parsed.wantsPartialPlan === 'boolean' ? parsed.wantsPartialPlan : fallback.wantsPartialPlan,
+            customerConfirmed: typeof parsed.customerConfirmed === 'boolean' ? parsed.customerConfirmed : fallback.customerConfirmed,
+            nextBestQuestion: typeof parsed.nextBestQuestion === 'string' && parsed.nextBestQuestion.trim().length > 0
+                ? parsed.nextBestQuestion.trim()
+                : fallback.nextBestQuestion,
+        };
+    } catch (error) {
+        console.error('[Voice Recording] Negotiation extraction fallback:', error);
+        return fallback;
+    }
 }
 
 async function applyVoiceIntentOutcome(args: {
@@ -196,6 +372,133 @@ async function applyVoiceIntentOutcome(args: {
     return 'We could not clearly capture your payment commitment. We will follow up again tomorrow. Goodbye.';
 }
 
+function computeMinimumPartial(invoiceAmount: number): number {
+    return Math.min(invoiceAmount, Math.max(100, Math.round(invoiceAmount * 0.1)));
+}
+
+function formatDateForSpeech(date: Date): string {
+    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+async function getOrCreateVoiceSession(callSid: string, invoice: any): Promise<any> {
+    const existing = await VoiceCallSession.findOne({ callSid });
+    if (existing) return existing;
+
+    const session = new VoiceCallSession({
+        callSid,
+        invoiceId: invoice.invoice_id,
+        customerPhone: invoice.client_phone,
+        stage: 'OPENING',
+        status: 'active',
+        turnCount: 0,
+        maxTurns: 6,
+        partialAmountNow: 0,
+        remainingAmount: Math.max(0, Math.round(invoice.amount || 0)),
+    });
+    await session.save();
+    return session;
+}
+
+async function finalizeNegotiationSession(args: {
+    session: any;
+    invoice: any;
+    intent: NegotiationIntent;
+    confidence: number;
+    transcript: string;
+}): Promise<string> {
+    const { session, invoice, intent, confidence, transcript } = args;
+
+    const promisedDate = session.promisedDate ? new Date(session.promisedDate) : null;
+    const partialAmountNow = clampCurrency(session.partialAmountNow || 0, Math.round(invoice.amount || 0));
+    const remainingAmount = Math.max(0, Math.round(invoice.amount || 0) - partialAmountNow);
+
+    session.stage = 'CLOSED';
+    session.status = 'completed';
+    session.outcomeIntent = intent;
+    session.confidence = confidence;
+    session.remainingAmount = remainingAmount;
+    session.finalSummary = promisedDate
+        ? (partialAmountNow > 0
+            ? `Customer committed Rs.${partialAmountNow} now and Rs.${remainingAmount} by ${formatDateForSpeech(promisedDate)}`
+            : `Customer committed full payment by ${formatDateForSpeech(promisedDate)}`)
+        : 'Negotiation incomplete. Promise date not captured.';
+    await session.save();
+
+    invoice.last_intent = intent;
+    invoice.ai_confidence = confidence;
+    invoice.last_contacted_at = new Date();
+    invoice.no_speech_count = 0;
+    invoice.reminder_history.push({
+        timestamp: new Date(),
+        channel: 'voice_call',
+        message_content: `[Deepgram]: ${transcript} | [Intent: ${intent}] | [PartialNow: ${partialAmountNow}] | [Remaining: ${remainingAmount}]${promisedDate ? ` | [Date: ${promisedDate.toISOString()}]` : ''}`,
+        delivery_status: 'delivered'
+    });
+
+    if (intent === 'DISPUTE') {
+        invoice.status = 'disputed';
+        invoice.next_retry_at = null;
+        await syncCustomerRecoveryByPhone(invoice.client_phone, {
+            nextCallDate: null,
+            recoveryStatus: 'Failed',
+            recoveryNotes: 'Customer raised dispute during multi-turn voice negotiation.'
+        });
+        await invoice.save();
+        return 'Understood. We have marked your case for manual review by the shopkeeper. Thank you.';
+    }
+
+    if (!promisedDate) {
+        const retryDate = fallbackRetryDate(24);
+        invoice.next_retry_at = retryDate;
+        invoice.last_intent = 'UNKNOWN';
+        invoice.reminder_history.push({
+            timestamp: new Date(),
+            channel: 'system',
+            message_content: '[AUTO] Negotiation ended without valid promise date. Retry scheduled in 1 day.',
+            delivery_status: 'delivered'
+        });
+        await invoice.save();
+        await syncCustomerRecoveryByPhone(invoice.client_phone, {
+            nextCallDate: retryDate.getTime(),
+            recoveryStatus: 'Call Again',
+            recoveryNotes: 'Call completed but no valid promise date captured. Retry in 1 day.'
+        });
+        return 'Thank you. We could not capture a valid payment date. We will call again tomorrow to confirm.';
+    }
+
+    invoice.status = 'promised';
+    invoice.promised_date = promisedDate;
+    invoice.due_date = promisedDate;
+    invoice.next_retry_at = promisedDate;
+    invoice.reminder_history.push({
+        timestamp: new Date(),
+        channel: 'system',
+        message_content: `[AUTO] Multi-turn plan captured. Partial now: ${partialAmountNow}, Remaining: ${remainingAmount}, Due: ${formatDateForSpeech(promisedDate)}`,
+        delivery_status: 'delivered'
+    });
+    await invoice.save();
+
+    await syncCustomerRecoveryByPhone(invoice.client_phone, {
+        nextCallDate: promisedDate.getTime(),
+        recoveryStatus: 'Promised',
+        recoveryNotes: partialAmountNow > 0
+            ? `Voice plan: Rs.${partialAmountNow} now and Rs.${remainingAmount} by ${formatDateForSpeech(promisedDate)}.`
+            : `Voice plan: full payment by ${formatDateForSpeech(promisedDate)}.`
+    });
+
+    await sendWhatsAppSettlementFollowUp({
+        invoice,
+        partialAmountNow,
+        remainingAmount,
+        promisedDate,
+    });
+
+    if (partialAmountNow > 0) {
+        return `Thank you. We have noted your plan. Please pay rupees ${partialAmountNow} now and the remaining by ${formatDateForSpeech(promisedDate)}. Goodbye.`;
+    }
+    return `Thank you. We have noted your payment commitment for ${formatDateForSpeech(promisedDate)}. Goodbye.`;
+}
+
 // ─── TEXT REPLY WEBHOOK ────────────────────────────────────────────────────
 
 invoiceWebhooksRouter.post('/reply', async (req: Request, res: Response) => {
@@ -253,10 +556,15 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
     res.type('text/xml');
 
     try {
+        const backendUrl = process.env.BACKEND_URL || '';
+        if (!/^https?:\/\//.test(backendUrl)) {
+            return res.send(buildHangupTwiml('Server callback configuration is incomplete. Please contact shopkeeper.'));
+        }
         const from = String(req.body?.From || '');
         const to = String(req.body?.To || '');
         const recordingUrlRaw = String(req.body?.RecordingUrl || '');
         const recordingSid = String(req.body?.RecordingSid || '');
+        const callSid = String(req.body?.CallSid || '');
         console.log(`[Voice Recording] From=${from} To=${to} RecordingUrl=${recordingUrlRaw ? 'yes' : 'no'}`);
 
         const invoice = await findInvoiceByCallParties(from, to);
@@ -266,23 +574,24 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
         }
         console.log(`[Voice Recording] Matched invoice ${invoice.invoice_id} for ${invoice.client_phone}`);
 
+        if (!callSid) {
+            console.warn('[Voice Recording] Missing CallSid in webhook payload');
+            return res.send(buildHangupTwiml('Call session was not identified. We will call again later.'));
+        }
+
+        const session = await getOrCreateVoiceSession(callSid, invoice);
+
         if (recordingSid) {
             const sidMarker = `[RECORDING_SID:${recordingSid}]`;
-            const duplicate = invoice.reminder_history.some((entry: any) =>
-                entry.channel === 'voice_call' && String(entry.message_content || '').includes(sidMarker)
-            );
+            const duplicate = session.lastRecordingSid === recordingSid
+                || session.transcriptTurns.some((turn: any) => String(turn.text || '').includes(sidMarker));
             if (duplicate) {
                 console.log(`[Voice Recording] Duplicate callback ignored for ${recordingSid}`);
                 return res.send(buildHangupTwiml('Thank you. Goodbye.'));
             }
-
-            invoice.reminder_history.push({
-                timestamp: new Date(),
-                channel: 'voice_call',
-                message_content: `${sidMarker} received`,
-                delivery_status: 'received'
-            });
-            await invoice.save();
+            session.lastRecordingSid = recordingSid;
+            session.transcriptTurns.push({ speaker: 'system', text: `${sidMarker} received` });
+            await session.save();
         }
 
         if (!recordingUrlRaw) {
@@ -300,6 +609,10 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
                 recoveryStatus: 'Call Again',
                 recoveryNotes: 'No audio captured in call. Retry scheduled.'
             });
+            session.status = 'failed';
+            session.stage = 'CLOSED';
+            session.finalSummary = 'No recording received from Twilio.';
+            await session.save();
             return res.send(buildHangupTwiml('We could not capture your response. We will call you again later. Goodbye.'));
         }
 
@@ -330,6 +643,10 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
                 recoveryStatus: 'Call Again',
                 recoveryNotes: 'Recording fetch failed. Retry scheduled.'
             });
+            session.status = 'failed';
+            session.stage = 'CLOSED';
+            session.finalSummary = 'Recording fetch failed.';
+            await session.save();
             return res.send(buildHangupTwiml('We could not process your response. We will call you again later. Goodbye.'));
         }
 
@@ -356,19 +673,147 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
                 recoveryStatus: 'Call Again',
                 recoveryNotes: 'Voice transcription failed. Retry scheduled.'
             });
+            session.status = 'failed';
+            session.stage = 'CLOSED';
+            session.finalSummary = 'Deepgram transcription failed.';
+            await session.save();
             return res.send(buildHangupTwiml('We could not clearly understand your response. We will call again tomorrow. Goodbye.'));
         }
 
-        const analysis = await classifyIntentAndPromise(transcript);
-        const goodbyeText = await applyVoiceIntentOutcome({
-            invoice,
+        session.turnCount = (session.turnCount || 0) + 1;
+        session.transcriptTurns.push({ speaker: 'customer', text: transcript });
+
+        const extraction = await extractNegotiationTurn({
+            invoiceAmount: Math.round(invoice.amount || 0),
+            stage: session.stage,
             transcript,
-            intent: analysis.intent,
-            promisedDate: analysis.promisedDate,
-            confidence: analysis.confidence,
+            existingPartialAmount: session.partialAmountNow || 0,
+            existingPromisedDate: session.promisedDate || null,
         });
 
-        return res.send(buildHangupTwiml(goodbyeText));
+        session.outcomeIntent = extraction.intent;
+        session.confidence = extraction.confidence;
+        const extractedDate = parsePromisedDateFromISO(extraction.promisedDateISO);
+        if (extractedDate) {
+            session.promisedDate = extractedDate;
+        }
+
+        const minimumPartial = computeMinimumPartial(Math.round(invoice.amount || 0));
+        if (typeof extraction.partialAmountNow === 'number' && extraction.partialAmountNow > 0) {
+            session.partialAmountNow = clampCurrency(extraction.partialAmountNow, Math.round(invoice.amount || 0));
+            session.remainingAmount = Math.max(0, Math.round(invoice.amount || 0) - session.partialAmountNow);
+        }
+
+        const immediateFull = extraction.intent === 'PAYMENT_PROMISED' && detectImmediateFullPayment(transcript);
+        if (immediateFull) {
+            session.partialAmountNow = Math.round(invoice.amount || 0);
+            session.remainingAmount = 0;
+            session.promisedDate = new Date();
+            const finalText = await finalizeNegotiationSession({
+                session,
+                invoice,
+                intent: 'PAYMENT_PROMISED',
+                confidence: extraction.confidence,
+                transcript,
+            });
+            return res.send(buildHangupTwiml(finalText));
+        }
+
+        if (session.turnCount >= (session.maxTurns || 6)) {
+            const finalIntent: NegotiationIntent = extraction.intent === 'DISPUTE'
+                ? 'DISPUTE'
+                : session.partialAmountNow > 0
+                    ? 'PARTIAL_PAYMENT'
+                    : 'EXTENSION_REQUESTED';
+            const finalText = await finalizeNegotiationSession({
+                session,
+                invoice,
+                intent: finalIntent,
+                confidence: extraction.confidence,
+                transcript,
+            });
+            return res.send(buildHangupTwiml(finalText));
+        }
+
+        if (extraction.intent === 'DISPUTE') {
+            const finalText = await finalizeNegotiationSession({
+                session,
+                invoice,
+                intent: 'DISPUTE',
+                confidence: extraction.confidence,
+                transcript,
+            });
+            return res.send(buildHangupTwiml(finalText));
+        }
+
+        if (session.stage === 'OPENING') {
+            if (session.partialAmountNow > 0) {
+                session.stage = session.promisedDate ? 'CONFIRM_PLAN' : 'ASK_REMAINING_DATE';
+            } else {
+                session.stage = 'ASK_PARTIAL_NOW';
+            }
+        } else if (session.stage === 'ASK_PARTIAL_NOW') {
+            if (session.partialAmountNow > 0) {
+                session.stage = session.promisedDate ? 'CONFIRM_PLAN' : 'ASK_REMAINING_DATE';
+            } else if (extraction.wantsPartialPlan === true || detectAffirmative(transcript)) {
+                session.stage = 'ASK_PARTIAL_AMOUNT';
+            } else if (extraction.wantsPartialPlan === false || detectNegative(transcript) || extraction.intent === 'REFUSAL') {
+                session.partialAmountNow = 0;
+                session.remainingAmount = Math.round(invoice.amount || 0);
+                session.stage = 'ASK_REMAINING_DATE';
+            }
+        } else if (session.stage === 'ASK_PARTIAL_AMOUNT') {
+            if (session.partialAmountNow >= minimumPartial) {
+                session.stage = session.promisedDate ? 'CONFIRM_PLAN' : 'ASK_REMAINING_DATE';
+            }
+        } else if (session.stage === 'ASK_REMAINING_DATE') {
+            if (session.promisedDate) {
+                session.stage = 'CONFIRM_PLAN';
+            }
+        } else if (session.stage === 'CONFIRM_PLAN') {
+            if ((extraction.customerConfirmed || detectAffirmative(transcript) || extraction.intent === 'PAYMENT_PROMISED') && session.promisedDate) {
+                const finalText = await finalizeNegotiationSession({
+                    session,
+                    invoice,
+                    intent: session.partialAmountNow > 0 ? 'PARTIAL_PAYMENT' : 'PAYMENT_PROMISED',
+                    confidence: extraction.confidence,
+                    transcript,
+                });
+                return res.send(buildHangupTwiml(finalText));
+            }
+            if (!session.promisedDate) {
+                session.stage = 'ASK_REMAINING_DATE';
+            }
+            if (detectNegative(transcript)) {
+                session.stage = 'ASK_PARTIAL_AMOUNT';
+            }
+        }
+
+        let nextPrompt = extraction.nextBestQuestion;
+        if (session.stage === 'ASK_PARTIAL_NOW') {
+            nextPrompt = `Can you pay at least rupees ${minimumPartial} today and the remaining amount by your promised date?`;
+        } else if (session.stage === 'ASK_PARTIAL_AMOUNT') {
+            nextPrompt = `Please tell me the exact amount you can pay right now. Minimum suggested is rupees ${minimumPartial}.`;
+        } else if (session.stage === 'ASK_REMAINING_DATE') {
+            nextPrompt = `Noted. By which date will you pay the remaining amount of rupees ${session.remainingAmount || Math.round(invoice.amount || 0)}?`;
+        } else if (session.stage === 'CONFIRM_PLAN') {
+            const partialNow = session.partialAmountNow || 0;
+            const remaining = Math.max(0, Math.round(invoice.amount || 0) - partialNow);
+            if (!session.promisedDate) {
+                nextPrompt = `Please tell the exact date for paying rupees ${remaining}. For example, tomorrow or after 3 days.`;
+            } else {
+                const promised = new Date(session.promisedDate);
+                nextPrompt = partialNow > 0
+                    ? `Please confirm: you will pay rupees ${partialNow} now and rupees ${remaining} by ${formatDateForSpeech(promised)}. Is this correct?`
+                    : `Please confirm: you will pay rupees ${remaining} by ${formatDateForSpeech(promised)}. Is this correct?`;
+            }
+        }
+
+        session.lastPrompt = nextPrompt;
+        session.transcriptTurns.push({ speaker: 'agent', text: nextPrompt });
+        await session.save();
+
+        return res.send(buildRecordFollowupTwiml(nextPrompt, backendUrl));
     } catch (error) {
         console.error('[Voice Recording] Error:', error);
         return res.send(buildErrorTwiml());

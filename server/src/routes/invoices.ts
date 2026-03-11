@@ -7,6 +7,7 @@ import { generateMessage } from '../services/messageGenerator.js';
 import { Customer } from '../models/Customer.js';
 import { LedgerEntry } from '../models/LedgerEntry.js';
 import { recalculateGlobalKhataScore } from '../utils/khataScore.js';
+import { VoiceCallSession } from '../models/VoiceCallSession.js';
 
 export const invoiceRouter = Router();
 
@@ -258,6 +259,11 @@ invoiceRouter.get('/recovery-state/:invoiceId', auth, async (req: Request, res: 
             .reverse()
             .find((entry) => entry.channel === 'voice_call' && entry.message_content?.includes('[Deepgram]:'));
 
+        const latestSession = await VoiceCallSession.findOne({ invoiceId: invoice.invoice_id }).sort({ updatedAt: -1 });
+        const latestSessionCustomerTurn = latestSession?.transcriptTurns
+            ? [...latestSession.transcriptTurns].reverse().find((turn: any) => turn.speaker === 'customer')
+            : null;
+
         const hasTranscript = Boolean(latestTranscriptHistory);
         const hasTranscriptSince = hasValidSince
             ? invoice.reminder_history.some((entry) =>
@@ -280,6 +286,14 @@ invoiceRouter.get('/recovery-state/:invoiceId', auth, async (req: Request, res: 
             latestTranscriptLog: latestTranscriptHistory?.message_content || null,
             latestVoiceAt: latestVoiceHistory?.timestamp || null,
             latestTranscriptAt: latestTranscriptHistory?.timestamp || null,
+            negotiationStage: latestSession?.stage || null,
+            negotiationStatus: latestSession?.status || null,
+            negotiationSummary: latestSession?.finalSummary || null,
+            negotiationTurns: latestSession?.turnCount || 0,
+            negotiationPartialAmountNow: latestSession?.partialAmountNow || 0,
+            negotiationRemainingAmount: latestSession?.remainingAmount || null,
+            negotiationPromisedDate: latestSession?.promisedDate || null,
+            latestSessionCustomerTranscript: latestSessionCustomerTurn?.text || null,
             customerRecoveryStatus: customer?.recoveryStatus || null,
             customerNextCallDate: customer?.nextCallDate || null,
             customerRecoveryNotes: customer?.recoveryNotes || null,

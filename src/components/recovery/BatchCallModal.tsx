@@ -70,7 +70,7 @@ const BatchCallModal = ({ isOpen, onClose, customers }: { isOpen: boolean, onClo
                         customer: { number: formatPhone(current.phone), name: current.name },
                         assistant: {
                             model: {
-                                provider: "openai", model: "gpt-4o",
+                                provider: "openai", model: "gpt-4o-mini",
                                 messages: [{ role: "system", content: "Speak ONLY Telugu. Use tool for dates." }],
                                 tools: [{ type: "function", function: { name: "updatePromiseDate", description: "date", parameters: { type: "object", properties: { date: { type: "string" } } } } }]
                             },
