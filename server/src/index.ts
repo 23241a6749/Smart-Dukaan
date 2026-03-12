@@ -28,7 +28,6 @@ import { supplierBillsRouter } from './routes/supplierBills.js';
 import { aiRouter } from './routes/ai.js';
 import { invoiceRouter } from './routes/invoices.js';
 import { invoiceWebhooksRouter } from './routes/invoiceWebhooks.js';
-import { startInvoiceScheduler } from './jobs/reminderScheduler.js';
 import { gstRouter } from './routes/gst.js';
 import { reportsRouter } from './routes/reports.js';
 
@@ -88,7 +87,6 @@ mongoose.connect(process.env.MONGODB_URI!)
         console.log('Connected to MongoDB Atlas');
 
         // Start background tasks
-        startInvoiceScheduler();
 
         httpServer.listen(Number(PORT), '0.0.0.0', () => {
             console.log(`Server (ShopOS) is running on port ${PORT} [pid=${process.pid}]`);

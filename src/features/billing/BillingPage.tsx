@@ -966,7 +966,7 @@ export const BillingPage: React.FC = () => {
                                     <div className="flex justify-between items-center mb-3">
                                         <div className="flex items-center gap-2">
                                             <Award className="text-primary-green" size={20} />
-                                            <span className="font-black text-gray-900 dark:text-white uppercase tracking-tighter">Khata Score</span>
+                                            <span className="font-black text-gray-900 dark:text-white uppercase tracking-tighter">Udhaar Score</span>
                                         </div>
                                         <span className={`text-2xl font-black ${khataInfo.score >= 700 ? 'text-green-600' : khataInfo.score >= 500 ? 'text-yellow-600' : 'text-red-600'}`}>
                                             {khataInfo.score}
@@ -1076,7 +1076,7 @@ export const BillingPage: React.FC = () => {
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <div className="font-semibold text-gray-900 dark:text-white">Khata (Credit)</div>
+                                                    <div className="font-semibold text-gray-900 dark:text-white">Udhaar (Credit)</div>
                                                     <div className="text-xs text-gray-500 dark:text-gray-400">
                                                         {khataInfo ? `₹${khataInfo.availableCredit} available` : 'Pay on credit'}
                                                     </div>
@@ -1151,7 +1151,7 @@ export const BillingPage: React.FC = () => {
                                             !paymentMethod ? 'Select a payment method'
                                                 : paymentMethod === 'cash' ? `Collect ₹${cartTotal} Cash`
                                                     : paymentMethod === 'online' ? `Pay ₹${cartTotal} via UPI`
-                                                        : `Add ₹${cartTotal} to Khata`
+                                                        : `Add ₹${cartTotal} to Udhaar`
                                         }
                                     </span>
                                 </button>
