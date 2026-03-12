@@ -5,12 +5,16 @@ import {
     ChevronDown,
     FileText,
     IndianRupee,
-    Landmark,
     Loader2,
     RefreshCcw,
     Sparkles,
     TrendingDown,
     TrendingUp,
+    Download,
+    Table as TableIcon,
+    ShieldCheck,
+    Calendar,
+    Landmark,
 } from 'lucide-react';
 import { gstApi } from '../../services/api';
 import type { GSTSummary, ITRSummary } from '../../services/api';
@@ -36,14 +40,16 @@ function StatCard({
     label: string; value: string; sub?: string; color: string; icon: React.ReactNode;
 }) {
     return (
-        <div className={`rounded-3xl p-6 ${color} flex flex-col justify-between min-h-[128px] shadow-sm`}>
+        <div className={`rounded-3xl p-6 ${color} flex flex-col justify-between min-h-[140px] shadow-sm border border-gray-100/10`}>
             <div className="flex items-start justify-between">
-                <p className="text-xs font-black uppercase tracking-widest opacity-70">{label}</p>
-                <div className="opacity-60">{icon}</div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{label}</p>
+                <div className="p-2 bg-white/20 rounded-xl backdrop-blur-md">
+                    {icon}
+                </div>
             </div>
             <div>
                 <p className="text-2xl font-black tracking-tight">{value}</p>
-                {sub && <p className="text-xs mt-1 opacity-60 font-medium">{sub}</p>}
+                {sub && <p className="text-[10px] mt-1 opacity-70 font-bold uppercase tracking-wider">{sub}</p>}
             </div>
         </div>
     );
@@ -52,9 +58,9 @@ function StatCard({
 // ── Row ───────────────────────────────────────────────────────────────────────
 function Row({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
     return (
-        <div className={`flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700 last:border-0 ${highlight ? 'font-black text-gray-900 dark:text-white' : ''}`}>
-            <span className="text-sm text-gray-600 dark:text-gray-400">{label}</span>
-            <span className={`text-sm font-bold ${highlight ? 'text-lg text-primary-green' : 'text-gray-900 dark:text-white'}`}>{value}</span>
+        <div className={`flex items-center justify-between py-3.5 border-b border-gray-50 dark:border-gray-700/50 last:border-0 ${highlight ? 'font-black text-gray-900 dark:text-white' : ''}`}>
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">{label}</span>
+            <span className={`text-sm font-bold ${highlight ? 'text-base text-primary-green' : 'text-gray-900 dark:text-white'}`}>{value}</span>
         </div>
     );
 }
@@ -66,8 +72,10 @@ export default function GSTReportPage() {
     const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
     const [gstData, setGSTData] = useState<GSTSummary | null>(null);
     const [itrData, setITRData] = useState<ITRSummary | null>(null);
+    const [yearlySummaries, setYearlySummaries] = useState<GSTSummary[]>([]);
     const [loading, setLoading] = useState(false);
     const [classifying, setClassifying] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -78,6 +86,14 @@ export default function GSTReportPage() {
             ]);
             setGSTData(gstRes.data);
             setITRData(itrRes.data);
+
+            // Also load monthly data for the table (parallel fetch for efficiency)
+            const promises = Array.from({ length: 12 }, (_, i) =>
+                gstApi.getGSTSummary(i + 1, selectedYear).catch(() => ({ data: null }))
+            );
+            const results = await Promise.all(promises);
+            setYearlySummaries(results.map(r => r.data).filter(Boolean) as GSTSummary[]);
+
         } catch (err: any) {
             addToast(err.response?.data?.message || 'Failed to load GST data', 'error');
         } finally {
@@ -100,146 +116,253 @@ export default function GSTReportPage() {
         }
     };
 
+    const handleExportCSV = async () => {
+        setExporting(true);
+        try {
+            const invoicesRes = await gstApi.getInvoices({ month: selectedMonth, year: selectedYear });
+            const invoices = invoicesRes.data;
+
+            if (!invoices || invoices.length === 0) {
+                addToast('No transaction data found to export', 'error');
+                return;
+            }
+
+            const headers = ['Date', 'Type', 'Item Name', 'Taxable Amount', 'GST Amount', 'Total Amount'];
+            const csvRows = [headers.join(',')];
+
+            invoices.forEach((inv: any) => {
+                inv.items.forEach((item: any) => {
+                    const row = [
+                        new Date(inv.createdAt).toLocaleDateString('en-IN'),
+                        inv.invoiceType === 'sale' ? 'Sale' : 'Purchase',
+                        `"${item.name.replace(/"/g, '""')}"`,
+                        item.baseAmount.toFixed(2),
+                        (item.cgstAmount + item.sgstAmount).toFixed(2),
+                        item.totalAmount.toFixed(2)
+                    ];
+                    csvRows.push(row.join(','));
+                });
+            });
+
+            const blob = new Blob([csvRows.join('\u000a')], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `GST_Report_${MONTHS[selectedMonth - 1]}_${selectedYear}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            addToast('GST Report downloaded successfully', 'success');
+        } catch (err) {
+            addToast('Failed to generate export', 'error');
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const netPayable = gstData?.netGSTPayable ?? 0;
 
     return (
-        <div className="space-y-6 pb-48">
+        <div className="space-y-6 pb-48 animate-in fade-in duration-500">
             {/* ── Hero Header ── */}
-            <div className="relative overflow-hidden rounded-[2rem] bg-gradient-to-br from-violet-700 via-indigo-700 to-slate-900 p-6 text-white shadow-2xl">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_32%)]" />
-                <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="relative overflow-hidden rounded-[2.5rem] bg-white dark:bg-gray-800 p-8 shadow-sm border border-gray-100 dark:border-gray-700">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-primary-green/5 rounded-full -mr-32 -mt-32 blur-3xl" />
+
+                <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
                     <div>
-                        <p className="text-xs font-black uppercase tracking-[0.35em] text-violet-200/80">
-                            GST + ITR Assistance
-                        </p>
-                        <h1 className="mt-2 text-3xl font-black tracking-tight">
-                            Tax Intelligence Centre
+                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary-green/10 text-primary-green rounded-full mb-3">
+                            <ShieldCheck size={14} />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Verified Tax Centre</span>
+                        </div>
+                        <h1 className="text-4xl font-black tracking-tighter text-gray-900 dark:text-white">
+                            GST &amp; ITR <span className="text-primary-green">Dashboard</span>
                         </h1>
-                        <p className="mt-1 max-w-lg text-sm text-indigo-100/80">
-                            Auto-tracked GST on every sale &amp; purchase. Monthly summaries ready for GSTR filing.
-                        </p>
                     </div>
 
                     <div className="flex flex-wrap gap-3">
                         {/* Month / Year pickers */}
-                        <div className="relative">
-                            <select
-                                value={selectedMonth}
-                                onChange={e => setSelectedMonth(Number(e.target.value))}
-                                className="appearance-none rounded-2xl border border-white/20 bg-white/10 px-4 py-3 pr-9 text-sm font-bold text-white backdrop-blur-md focus:outline-none"
-                            >
-                                {MONTHS.map((m, i) => (
-                                    <option key={m} value={i + 1} className="text-gray-900">{m}</option>
-                                ))}
-                            </select>
-                            <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 opacity-60" />
-                        </div>
-                        <div className="relative">
-                            <select
-                                value={selectedYear}
-                                onChange={e => setSelectedYear(Number(e.target.value))}
-                                className="appearance-none rounded-2xl border border-white/20 bg-white/10 px-4 py-3 pr-9 text-sm font-bold text-white backdrop-blur-md focus:outline-none"
-                            >
-                                {YEARS.map(y => (
-                                    <option key={y} value={y} className="text-gray-900">{y}</option>
-                                ))}
-                            </select>
-                            <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 opacity-60" />
+                        <div className="flex bg-gray-50 dark:bg-gray-900 p-1.5 rounded-2xl border border-gray-100 dark:border-gray-700">
+                            <div className="relative">
+                                <select
+                                    value={selectedMonth}
+                                    onChange={e => setSelectedMonth(Number(e.target.value))}
+                                    className="appearance-none bg-transparent pl-4 pr-10 py-2 text-sm font-bold text-gray-700 dark:text-gray-200 focus:outline-none"
+                                >
+                                    {MONTHS.map((m, i) => (
+                                        <option key={m} value={i + 1} className="text-gray-900">{m}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 opacity-40 text-gray-500" />
+                            </div>
+                            <div className="w-[1px] bg-gray-200 dark:bg-gray-700 my-1 mx-1" />
+                            <div className="relative">
+                                <select
+                                    value={selectedYear}
+                                    onChange={e => setSelectedYear(Number(e.target.value))}
+                                    className="appearance-none bg-transparent pl-4 pr-10 py-2 text-sm font-bold text-gray-700 dark:text-gray-200 focus:outline-none"
+                                >
+                                    {YEARS.map(y => (
+                                        <option key={y} value={y} className="text-gray-900">{y}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 opacity-40 text-gray-500" />
+                            </div>
                         </div>
 
                         <button
                             onClick={loadData}
                             disabled={loading}
-                            className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-bold backdrop-blur-md transition hover:bg-white/20 disabled:opacity-50"
+                            className="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition-all active:scale-95 disabled:opacity-50"
                         >
-                            {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
-                            Refresh
+                            {loading ? <Loader2 size={20} className="animate-spin" /> : <RefreshCcw size={20} />}
                         </button>
 
                         <button
                             onClick={handleClassifyAll}
                             disabled={classifying}
-                            className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-indigo-900 shadow-xl transition hover:scale-[1.02] disabled:opacity-60"
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-gray-800 border border-primary-green/30 text-primary-green rounded-2xl text-sm font-black uppercase tracking-tighter hover:bg-primary-green/5 transition-all active:scale-95 disabled:opacity-60"
                         >
-                            {classifying ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                            {classifying ? 'Classifying...' : 'AI-Classify Products'}
+                            {classifying ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                            AI-Classify
+                        </button>
+
+                        <button
+                            onClick={handleExportCSV}
+                            disabled={exporting || loading}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-primary-green text-white rounded-2xl text-sm font-black uppercase tracking-tighter shadow-lg shadow-primary-green/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-60"
+                        >
+                            {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                            Download Report
                         </button>
                     </div>
                 </div>
             </div>
 
             {loading && (
-                <div className="flex items-center justify-center py-16">
-                    <Loader2 size={36} className="animate-spin text-violet-500" />
+                <div className="flex items-center justify-center py-24 bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm">
+                    <div className="flex flex-col items-center gap-4">
+                        <Loader2 size={48} className="animate-spin text-primary-green" />
+                        <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Recalculating Tax Data...</p>
+                    </div>
                 </div>
             )}
 
             {!loading && gstData && (
                 <>
-                    {/* ── GST Stats ── */}
-                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    {/* ── Top Section: GST Summary ── */}
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                         <StatCard
-                            label="Total Sales"
-                            value={fmt(gstData.totalSales)}
-                            sub="incl. GST"
-                            color="bg-gradient-to-br from-emerald-500 to-teal-600 text-white"
+                            label="GST Collected"
+                            value={fmt(gstData.totalOutputGST)}
+                            sub="Total Output GST"
+                            color="bg-primary-green text-white"
                             icon={<TrendingUp size={20} />}
                         />
                         <StatCard
-                            label="Output GST"
-                            value={fmt(gstData.totalOutputGST)}
-                            sub="GST collected on sales"
-                            color="bg-gradient-to-br from-violet-500 to-indigo-600 text-white"
-                            icon={<IndianRupee size={20} />}
-                        />
-                        <StatCard
-                            label="Input GST"
+                            label="GST Paid"
                             value={fmt(gstData.totalInputGST)}
-                            sub="GST paid on purchases"
+                            sub="Total Input Credit"
                             color="bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-100 dark:border-gray-700"
-                            icon={<TrendingDown size={20} className="text-gray-500" />}
+                            icon={<TrendingDown size={20} className="text-gray-400" />}
                         />
                         <StatCard
-                            label="Net GST Payable"
+                            label="Net Liability"
                             value={fmt(netPayable)}
-                            sub={netPayable > 0 ? 'Due to government' : 'Credit / No dues'}
+                            sub={netPayable > 0 ? 'Monthly Tax Due' : 'Balance Carryforward'}
                             color={netPayable > 0
-                                ? 'bg-gradient-to-br from-rose-500 to-red-600 text-white'
-                                : 'bg-gradient-to-br from-green-500 to-emerald-600 text-white'}
-                            icon={<Landmark size={20} />}
+                                ? 'bg-orange-500 text-white'
+                                : 'bg-blue-500 text-white'}
+                            icon={<IndianRupee size={20} />}
                         />
                     </div>
 
+                    {/* ── Second Section: Monthly Breakdown Table ── */}
+                    <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+                        <div className="px-8 py-6 border-b border-gray-50 dark:border-gray-700 flex items-center gap-3">
+                            <div className="p-2 bg-primary-green/10 text-primary-green rounded-xl">
+                                <TableIcon size={20} />
+                            </div>
+                            <h2 className="text-xl font-black text-gray-900 dark:text-white">Monthly GST Breakdown</h2>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-gray-50 dark:bg-gray-900 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <tr>
+                                        <th className="px-8 py-4">Month</th>
+                                        <th className="px-8 py-4">Sales GST</th>
+                                        <th className="px-8 py-4">Purchase GST</th>
+                                        <th className="px-8 py-4 text-right">Net GST</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                                    {yearlySummaries.map((s, i) => (
+                                        <tr key={i} className={`hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors ${s.month === selectedMonth ? 'bg-primary-green/5' : ''}`}>
+                                            <td className="px-8 py-4">
+                                                <div className="font-black text-gray-900 dark:text-white text-sm">
+                                                    {MONTHS[s.month - 1]}
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-4 text-sm font-bold text-gray-600 dark:text-gray-300">
+                                                {fmt(s.totalOutputGST)}
+                                            </td>
+                                            <td className="px-8 py-4 text-sm font-bold text-gray-600 dark:text-gray-300">
+                                                {fmt(s.totalInputGST)}
+                                            </td>
+                                            <td className="px-8 py-4 text-right">
+                                                <span className={`text-sm font-black ${s.netGSTPayable > 0 ? 'text-orange-600' : 'text-primary-green'}`}>
+                                                    {fmt(s.netGSTPayable)}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {yearlySummaries.length === 0 && (
+                                        <tr>
+                                            <td colSpan={4} className="px-8 py-12 text-center text-gray-400 font-bold italic">
+                                                No monthly records found for {selectedYear}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <div className="grid gap-6 lg:grid-cols-2">
-                        {/* ── GST Breakdown ── */}
-                        <div className="rounded-[2rem] border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm">
-                            <div className="mb-4 flex items-center gap-3">
-                                <div className="rounded-2xl bg-violet-100 dark:bg-violet-900/30 p-3 text-violet-600 dark:text-violet-300">
-                                    <Calculator size={20} />
+                        {/* ── Detailed Breakdown ── */}
+                        <div className="rounded-[2.5rem] border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 shadow-sm">
+                            <div className="mb-6 flex items-center gap-3">
+                                <div className="rounded-2xl bg-gray-50 dark:bg-gray-900 p-3 text-primary-green">
+                                    <Calculator size={24} />
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-black text-gray-900 dark:text-white">CGST / SGST Breakdown</h2>
-                                    <p className="text-xs text-gray-500">{MONTHS[selectedMonth - 1]} {selectedYear}</p>
+                                    <h2 className="text-xl font-black text-gray-900 dark:text-white">Tax Type Breakdown</h2>
+                                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">{MONTHS[selectedMonth - 1]} {selectedYear}</p>
                                 </div>
                             </div>
 
-                            <div className="mb-4 rounded-2xl bg-violet-50 dark:bg-violet-900/10 p-4">
-                                <p className="mb-2 text-xs font-black uppercase tracking-wider text-violet-600 dark:text-violet-300">Output (Sales)</p>
-                                <Row label="CGST Collected" value={fmt(gstData.outputCGST)} />
-                                <Row label="SGST Collected" value={fmt(gstData.outputSGST)} />
-                                <Row label="Total Output GST" value={fmt(gstData.totalOutputGST)} highlight />
+                            <div className="space-y-6">
+                                <div className="p-6 rounded-[2rem] bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700">
+                                    <p className="mb-3 text-[10px] font-black uppercase tracking-[0.15em] text-gray-400">Section I: Output GST (Sales)</p>
+                                    <Row label="CGST Collected" value={fmt(gstData.outputCGST)} />
+                                    <Row label="SGST Collected" value={fmt(gstData.outputSGST)} />
+                                    <Row label="Total Output GST" value={fmt(gstData.totalOutputGST)} highlight />
+                                </div>
+
+                                <div className="p-6 rounded-[2rem] bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700">
+                                    <p className="mb-3 text-[10px] font-black uppercase tracking-[0.15em] text-gray-400">Section II: Input Credit (Purchases)</p>
+                                    <Row label="CGST Paid" value={fmt(gstData.inputCGST)} />
+                                    <Row label="SGST Paid" value={fmt(gstData.inputSGST)} />
+                                    <Row label="Total Input Credit" value={fmt(gstData.totalInputGST)} highlight />
+                                </div>
                             </div>
 
-                            <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-900/10 p-4">
-                                <p className="mb-2 text-xs font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-300">Input Credit (Purchases)</p>
-                                <Row label="CGST Paid" value={fmt(gstData.inputCGST)} />
-                                <Row label="SGST Paid" value={fmt(gstData.inputSGST)} />
-                                <Row label="Total Input Credit" value={fmt(gstData.totalInputGST)} highlight />
-                            </div>
-
-                            <div className="mt-4 flex items-center justify-between rounded-2xl bg-gray-900 dark:bg-white px-5 py-4">
-                                <span className="text-sm font-black text-white dark:text-gray-900">Net GST Payable</span>
-                                <span className={`text-lg font-black ${netPayable > 0 ? 'text-rose-300 dark:text-rose-600' : 'text-emerald-300 dark:text-emerald-600'}`}>
+                            <div className="mt-6 flex items-center justify-between p-6 rounded-[2rem] bg-gray-900 dark:bg-white">
+                                <div className="flex items-center gap-2">
+                                    <Landmark className="text-primary-green" size={20} />
+                                    <span className="text-sm font-black text-white dark:text-gray-900 uppercase tracking-widest">Net GST Due</span>
+                                </div>
+                                <span className={`text-2xl font-black ${netPayable > 0 ? 'text-orange-400' : 'text-primary-green'}`}>
                                     {fmt(netPayable)}
                                 </span>
                             </div>
@@ -247,43 +370,48 @@ export default function GSTReportPage() {
 
                         {/* ── ITR Assistance ── */}
                         {itrData && (
-                            <div className="rounded-[2rem] border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm">
-                                <div className="mb-4 flex items-center gap-3">
-                                    <div className="rounded-2xl bg-amber-100 dark:bg-amber-900/30 p-3 text-amber-600 dark:text-amber-300">
-                                        <FileText size={20} />
+                            <div className="rounded-[2.5rem] border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-8 shadow-sm">
+                                <div className="mb-6 flex items-center gap-3">
+                                    <div className="rounded-2xl bg-gray-50 dark:bg-gray-900 p-3 text-orange-500">
+                                        <FileText size={24} />
                                     </div>
                                     <div>
                                         <h2 className="text-xl font-black text-gray-900 dark:text-white">ITR Assistance</h2>
-                                        <p className="text-xs text-gray-500">Estimated income summary</p>
+                                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Estimated for {selectedYear}</p>
                                     </div>
                                 </div>
 
-                                <div className="space-y-0">
+                                <div className="space-y-1">
                                     <Row label="Gross Revenue (incl. GST)" value={fmt(itrData.revenue)} />
                                     <Row label="Revenue (ex-GST)" value={fmt(itrData.revenueExGST)} />
                                     <Row label="Purchase Cost" value={fmt(itrData.purchaseCost)} />
                                     <Row label="GST Collected (Output)" value={fmt(itrData.gstCollected)} />
                                     <Row label="GST Paid (Input Credit)" value={fmt(itrData.gstPaid)} />
                                     <Row label="Net GST Payable" value={fmt(itrData.netGSTPayable)} />
+                                    <div className="h-4" />
                                     <Row label="Gross Profit" value={fmt(itrData.grossProfit)} highlight />
                                     <Row label="Est. Taxable Income" value={fmt(itrData.estimatedTaxableIncome)} highlight />
                                 </div>
 
-                                <div className="mt-5 flex gap-2 rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-800/40 dark:bg-amber-950/20 p-4">
-                                    <AlertCircle size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                                    <p className="text-xs text-amber-700 dark:text-amber-300">{itrData.disclaimer}</p>
+                                <div className="mt-8 flex gap-4 p-5 rounded-2xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700">
+                                    <AlertCircle size={24} className="shrink-0 text-orange-500" />
+                                    <p className="text-xs text-gray-500 font-medium leading-relaxed italic">{itrData.disclaimer}</p>
                                 </div>
                             </div>
                         )}
                     </div>
-
                 </>
             )}
 
             {!loading && !gstData && (
-                <div className="rounded-3xl border border-dashed border-gray-300 dark:border-gray-700 p-16 text-center text-gray-500 dark:text-gray-400">
-                    No GST data found for {MONTHS[selectedMonth - 1]} {selectedYear}.<br />
-                    <span className="text-sm">Create GST invoices or use the AI-Classify button to get started.</span>
+                <div className="rounded-[3rem] border-2 border-dashed border-gray-200 dark:border-gray-700 p-24 text-center">
+                    <div className="w-20 h-20 bg-gray-50 dark:bg-gray-900 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Calendar size={32} className="text-gray-300" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-600 dark:text-gray-300 mb-2">No GST Records Found</h3>
+                    <p className="text-sm text-gray-400 max-w-sm mx-auto">
+                        Create GST invoices or use the AI-Classify button to populate tax data for {MONTHS[selectedMonth - 1]} {selectedYear}.
+                    </p>
                 </div>
             )}
         </div>
