@@ -30,6 +30,9 @@ import { invoiceRouter } from './routes/invoices.js';
 import { invoiceWebhooksRouter } from './routes/invoiceWebhooks.js';
 import { gstRouter } from './routes/gst.js';
 import { reportsRouter } from './routes/reports.js';
+import { expiryRouter } from './routes/expiry.js';
+import { wasteRouter } from './routes/waste.js';
+import { startExpiryScheduler } from './jobs/expiryScheduler.js';
 
 
 const app = express();
@@ -76,6 +79,8 @@ app.use('/api/invoices', invoiceRouter);
 app.use('/api/invoices/webhook', invoiceWebhooksRouter);
 app.use('/api/gst', gstRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/expiry', expiryRouter);
+app.use('/api/waste', wasteRouter);
 
 io.on('connection', (socket) => {
     console.log('User connected to socket:', socket.id);
@@ -87,6 +92,7 @@ mongoose.connect(process.env.MONGODB_URI!)
         console.log('Connected to MongoDB Atlas');
 
         // Start background tasks
+        startExpiryScheduler();
 
         httpServer.listen(Number(PORT), '0.0.0.0', () => {
             console.log(`Server (ShopOS) is running on port ${PORT} [pid=${process.pid}]`);

@@ -8,6 +8,7 @@ import { GSTInvoice } from '../models/GSTInvoice.js';
 import { GSTLedger } from '../models/GSTLedger.js';
 import { calculateInvoice, RawItem } from '../services/gstCalculator.js';
 import { classifyProduct } from '../services/gstClassification.js';
+import { addStockBatch } from '../services/inventoryBatches.js';
 
 const router = express.Router();
 
@@ -17,6 +18,9 @@ interface LineItem {
     unit: string;
     totalAmount: number;
     customSellingPrice?: number;  // Custom selling price per unit
+    expiryDate?: string;
+    batchCode?: string;
+    mfgDate?: string;
 }
 
 // Get Bill History
@@ -40,8 +44,8 @@ router.post('/process', auth, async (req, res) => {
         return res.status(400).json({ message: 'Invalid line items' });
     }
 
-    const results: any[] = [];
-    const updates: any[] = [];
+        const results: any[] = [];
+        const resolvedProductIds = new Map<string, string>();
     const billItems: any[] = [];
     let billTotal = 0;
 
@@ -81,25 +85,16 @@ router.post('/process', auth, async (req, res) => {
 
                 if (matchedProduct) {
                     action = 'updated';
-
-                    const updateDoc: any = {
-                        $inc: { stock: quantity },
-                        costPrice: costPrice
-                    };
+                    matchedProduct.costPrice = costPrice;
 
                     if (customSellingPrice) {
-                        updateDoc.price = customSellingPrice;
-                        if (matchedProduct.price !== customSellingPrice) {
-                            priceUpdate = { old: matchedProduct.price, new: customSellingPrice };
+                        const oldPrice = matchedProduct.price;
+                        matchedProduct.price = customSellingPrice;
+                        if (oldPrice !== customSellingPrice) {
+                            priceUpdate = { old: oldPrice, new: customSellingPrice };
                         }
                     }
-
-                    updates.push({
-                        updateOne: {
-                            filter: { _id: matchedProduct._id },
-                            update: updateDoc
-                        }
-                    });
+                    await matchedProduct.save();
                 }
             } else {
                 // No match, create new product
@@ -118,6 +113,22 @@ router.post('/process', auth, async (req, res) => {
 
                 await newProduct.save();
                 matchedProduct = newProduct;
+                allProducts.push(newProduct);
+                productNames.push(newProduct.name);
+            }
+
+            if (matchedProduct) {
+                resolvedProductIds.set(productName, String(matchedProduct._id));
+                await addStockBatch(String(userId), {
+                    productId: String(matchedProduct._id),
+                    quantity,
+                    costPricePerUnit: costPrice,
+                    sellingPriceSnapshot: customSellingPrice || Number(matchedProduct.price || 0),
+                    expiryDate: item.expiryDate ? new Date(item.expiryDate) : undefined,
+                    mfgDate: item.mfgDate ? new Date(item.mfgDate) : undefined,
+                    batchCode: item.batchCode,
+                    source: 'supplier_bill',
+                });
             }
 
             results.push({
@@ -129,10 +140,6 @@ router.post('/process', auth, async (req, res) => {
                 sellingPrice: matchedProduct?.price,
                 priceUpdate
             });
-        }
-
-        if (updates.length > 0) {
-            await Product.bulkWrite(updates);
         }
 
         // Save Bill History
@@ -149,7 +156,7 @@ router.post('/process', auth, async (req, res) => {
         const gstRawItems: RawItem[] = await Promise.all(billItems.map(async (item) => {
             const classification = await classifyProduct(item.productName);
             return {
-                productId: String(results.find(r => r.input.productName === item.productName)?.match?._id || new mongoose.Types.ObjectId()),
+                productId: resolvedProductIds.get(item.productName) || new mongoose.Types.ObjectId().toString(),
                 name: item.productName,
                 hsnCode: classification.hsnCode,
                 gstRate: classification.gstRate,

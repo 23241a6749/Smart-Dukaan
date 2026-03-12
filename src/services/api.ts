@@ -150,6 +150,120 @@ export const whatsappApi = {
     convertOrderToBill: (id: string) => api.post(`/whatsapp/orders/${id}/convert-to-bill`, {}),
 };
 
+export interface InventoryBatch {
+    _id: string;
+    productId: {
+        _id: string;
+        name: string;
+        category?: string;
+        unit?: string;
+        icon?: string;
+        price?: number;
+    } | string;
+    batchCode?: string;
+    mfgDate?: string;
+    expiryDate?: string;
+    quantityReceived: number;
+    quantityAvailable: number;
+    costPricePerUnit?: number;
+    sellingPriceSnapshot?: number;
+    status: 'active' | 'depleted' | 'expired' | 'returned';
+    source?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ExpiryQueueItem {
+    _id: string;
+    daysToExpiry: number;
+    riskBucket: 'urgent_3d' | 'week_7d' | 'month_30d' | 'expired';
+    suggestedAction: 'discount' | 'bundle' | 'return' | 'waste' | 'none';
+    actionStatus: 'open' | 'in_progress' | 'done' | 'ignored';
+    actionMeta?: Record<string, unknown>;
+    valueAtRisk: number;
+    productId: {
+        _id: string;
+        name: string;
+        category?: string;
+        unit?: string;
+        icon?: string;
+        price?: number;
+        costPrice?: number;
+    };
+    batchId: {
+        _id: string;
+        expiryDate?: string;
+        quantityAvailable: number;
+        costPricePerUnit?: number;
+    };
+}
+
+export interface ExpiryQueueSummary {
+    urgent_3d: number;
+    week_7d: number;
+    month_30d: number;
+    expired: number;
+    totalValueAtRisk: number;
+}
+
+export interface WasteLogItem {
+    _id: string;
+    reason: 'expired' | 'damaged' | 'spoilage' | 'leakage' | 'return_rejected' | 'other';
+    quantity: number;
+    unitCost: number;
+    estimatedLoss: number;
+    disposalMode: 'discarded' | 'donated' | 'supplier_returned';
+    notes?: string;
+    loggedAt: string;
+    productId: {
+        _id: string;
+        name: string;
+        category?: string;
+        unit?: string;
+        icon?: string;
+    };
+    batchId: {
+        _id: string;
+        expiryDate?: string;
+        batchCode?: string;
+    };
+}
+
+export const expiryApi = {
+    createBatch: (data: {
+        productId: string;
+        quantity: number;
+        costPricePerUnit?: number;
+        sellingPriceSnapshot?: number;
+        batchCode?: string;
+        mfgDate?: string;
+        expiryDate?: string;
+    }) => api.post<InventoryBatch>('/expiry/batches', data),
+    getBatches: (params?: { status?: string; productId?: string }) =>
+        api.get<InventoryBatch[]>('/expiry/batches', { params }),
+    updateBatch: (id: string, data: Record<string, unknown>) =>
+        api.patch<InventoryBatch>(`/expiry/batches/${id}`, data),
+    recompute: () => api.post('/expiry/recompute', {}),
+    getQueue: (params?: { bucket?: string; status?: string }) =>
+        api.get<{ summary: ExpiryQueueSummary; items: ExpiryQueueItem[] }>('/expiry/queue', { params }),
+    updateAction: (id: string, data: { actionStatus: string; actionMeta?: Record<string, unknown> }) =>
+        api.patch(`/expiry/actions/${id}`, data),
+    getKPI: () => api.get<{ products: number; openRisks: number; atRiskValue: number }>('/expiry/kpi'),
+};
+
+export const wasteApi = {
+    log: (data: {
+        batchId: string;
+        quantity: number;
+        reason: WasteLogItem['reason'];
+        disposalMode?: WasteLogItem['disposalMode'];
+        notes?: string;
+    }) => api.post<WasteLogItem>('/waste/log', data),
+    getHistory: (params?: { from?: string; to?: string }) => api.get<WasteLogItem[]>('/waste/history', { params }),
+    getKPI: (params?: { from?: string; to?: string }) =>
+        api.get<{ from: string; to: string; totalWasteValue: number; totalWasteQty: number; recoveredActions: number }>('/waste/kpi', { params }),
+};
+
 // ── GST & ITR API ────────────────────────────────────────────────────────────
 export interface GSTSummary {
     month: number;

@@ -15,6 +15,7 @@ import { GSTInvoice } from '../models/GSTInvoice.js';
 import { GSTLedger } from '../models/GSTLedger.js';
 import { calculateInvoice, RawItem } from '../services/gstCalculator.js';
 import { classifyProduct } from '../services/gstClassification.js';
+import { consumeProductStockFEFO } from '../services/inventoryBatches.js';
 
 const router = express.Router();
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
@@ -53,34 +54,36 @@ async function createBillInternal(session: mongoose.ClientSession, data: any, us
         if (!product) throw new Error(`Product ${item.productId} not found`);
         if (product.stock < item.quantity) throw new Error(`Insufficient stock for ${product.name}`);
 
-        product.stock -= item.quantity;
+        await consumeProductStockFEFO(userId, String(product._id), item.quantity, { session });
+        const refreshedProduct = await Product.findById(item.productId).session(session);
+        if (!refreshedProduct) throw new Error(`Product ${item.productId} not found`);
 
         // Auto-classify for GST if missing on product
-        if (product.get('gstRate') === undefined || product.get('hsnCode') === undefined) {
-            const classification = await classifyProduct(product.name);
-            product.set('gstRate', classification.gstRate);
-            product.set('hsnCode', classification.hsnCode);
-            product.set('normalizedName', classification.normalizedName);
-            product.set('category', classification.category);
+        if (refreshedProduct.get('gstRate') === undefined || refreshedProduct.get('hsnCode') === undefined) {
+            const classification = await classifyProduct(refreshedProduct.name);
+            refreshedProduct.set('gstRate', classification.gstRate);
+            refreshedProduct.set('hsnCode', classification.hsnCode);
+            refreshedProduct.set('normalizedName', classification.normalizedName);
+            refreshedProduct.set('category', classification.category);
         }
-        await product.save({ session });
+        await refreshedProduct.save({ session });
 
-        totalAmount += product.price * item.quantity;
+        totalAmount += refreshedProduct.price * item.quantity;
 
         processedItems.push({
-            productId: product._id,
-            name: product.name,
+            productId: refreshedProduct._id,
+            name: refreshedProduct.name,
             quantity: item.quantity,
-            price: product.price
+            price: refreshedProduct.price
         });
 
         gstRawItems.push({
-            productId: product._id.toString(),
-            name: product.name,
-            hsnCode: (product.get('hsnCode') as string) || '0000',
-            gstRate: (product.get('gstRate') as number) || 0,
+            productId: refreshedProduct._id.toString(),
+            name: refreshedProduct.name,
+            hsnCode: (refreshedProduct.get('hsnCode') as string) || '0000',
+            gstRate: (refreshedProduct.get('gstRate') as number) || 0,
             quantity: item.quantity,
-            unitPrice: product.price,
+            unitPrice: refreshedProduct.price,
             priceIncludesGST: true
         });
     }

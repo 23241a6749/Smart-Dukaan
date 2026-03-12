@@ -12,6 +12,7 @@ import { SupplierBillPage } from './features/supplier/SupplierBillPage';
 import WhatsAppPage from './features/whatsapp/WhatsAppPage';
 import RecoveryPage from './features/recovery/RecoveryPage';
 import GSTReportPage from './features/gst/GSTReportPage';
+import ExpiryWastePage from './features/expiry/ExpiryWastePage';
 import { CartProvider } from './contexts/CartContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -49,6 +50,7 @@ function App() {
                   <Route path="recovery" element={<RecoveryPage />} />
                   <Route path="records" element={<LedgerPage />} />
                   <Route path="gst" element={<GSTReportPage />} />
+                  <Route path="expiry" element={<ExpiryWastePage />} />
                 </Route>
               </Routes>
             </BrowserRouter>

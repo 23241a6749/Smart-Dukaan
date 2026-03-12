@@ -11,6 +11,7 @@ import { WhatsAppOrder } from '../models/WhatsAppOrder.js';
 import { Bill } from '../models/Bill.js';
 import { LedgerEntry } from '../models/LedgerEntry.js';
 import { auth } from '../middleware/auth.js';
+import { consumeProductStockFEFO, releaseStockBackToBatch } from '../services/inventoryBatches.js';
 
 const { MessagingResponse } = twilio.twiml;
 const router = express.Router();
@@ -313,7 +314,7 @@ async function createOrderAndRespond(args: {
     } = args;
 
     for (const item of items) {
-        await Product.findByIdAndUpdate(item.productId, { $inc: { stock: -item.quantity } });
+        await consumeProductStockFEFO(shopkeeperId, item.productId, item.quantity);
     }
 
     const totalAmount = items.reduce((sum, item) => sum + item.lineTotal, 0);
@@ -1126,12 +1127,10 @@ router.patch('/orders/:id/items', auth, async (req, res) => {
                     res.status(400).json({ message: `Insufficient stock for ${product.name}. Available: ${product.stock}` });
                     return;
                 }
-                product.stock -= delta;
+                await consumeProductStockFEFO(effectiveShopkeeperId, productId, delta, { session });
             } else {
-                product.stock += Math.abs(delta);
+                await releaseStockBackToBatch(effectiveShopkeeperId, productId, Math.abs(delta), { session });
             }
-
-            await product.save({ session });
         }
 
         const nextItems = Array.from(normalizedIncoming.entries()).map(([productId, quantity]) => {

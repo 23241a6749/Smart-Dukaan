@@ -41,6 +41,7 @@ export const MainLayout: React.FC = () => {
         { path: '/records', label: translate('Records'), icon: BookOpen },
         { path: '/analytics', label: translate('Analytics'), icon: TrendingUp },
         { path: '/gst', label: translate('GST & ITR'), icon: Landmark },
+        { path: '/expiry', label: translate('Expiry & Waste'), icon: Package },
     ];
 
     return (
