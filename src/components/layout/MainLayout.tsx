@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Store, Users, Package, TrendingUp, CreditCard, Menu, X, Gift, BookOpen, LogOut, Phone, MessageCircle, FileText, Landmark } from 'lucide-react';
+import { Store, Users, Package, TrendingUp, CreditCard, Menu, X, Gift, BookOpen, LogOut, Phone, MessageCircle, Landmark } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -16,7 +16,7 @@ export const MainLayout: React.FC = () => {
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
     const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
 
-    const { t, language, toggleLanguage, translate } = useLanguage();
+    const { t, language, toggleLanguage } = useLanguage();
 
 
     const confirmLogout = () => {
@@ -30,18 +30,17 @@ export const MainLayout: React.FC = () => {
     }, [darkMode]);
 
     const navLinks = [
-        { path: '/', label: translate('Billing'), icon: Store },
-        { path: '/products', label: translate('Products'), icon: Package },
-        { path: '/customers', label: translate('Customers'), icon: Users },
-        { path: '/whatsapp', label: translate('WhatsApp Desk'), icon: MessageCircle },
-        { path: '/deals', label: translate('Group Buy'), icon: Gift },
-        { path: '/supplier-bills', label: translate('Supplier Bills'), icon: FileText },
-        { path: '/recovery', label: translate('Legacy Agent'), icon: Phone },
-        { path: '/khata', label: translate('Udhaar'), icon: CreditCard },
-        { path: '/records', label: translate('Records'), icon: BookOpen },
-        { path: '/analytics', label: translate('Analytics'), icon: TrendingUp },
-        { path: '/gst', label: translate('GST & ITR'), icon: Landmark },
-        { path: '/expiry', label: translate('Expiry & Waste'), icon: Package },
+        { path: '/', label: t['Billing'], icon: Store },
+        { path: '/products', label: t['Products'], icon: Package },
+        { path: '/customers', label: t['Customers'], icon: Users },
+        { path: '/recovery', label: t['Recovery Agent'], icon: Phone },
+        { path: '/records', label: t['Records'], icon: BookOpen },
+        { path: '/khata', label: t['Udhaar'], icon: CreditCard },
+        { path: '/deals', label: t['Group Buy'], icon: Gift },
+        { path: '/expiry', label: t['Expiry & Waste'], icon: Package },
+        { path: '/analytics', label: t['Analytics'], icon: TrendingUp },
+        { path: '/gst', label: t['GST & ITR'], icon: Landmark },
+        { path: '/whatsapp', label: t['WhatsApp Desk'], icon: MessageCircle },
     ];
 
     return (
@@ -110,7 +109,7 @@ export const MainLayout: React.FC = () => {
                                     } backdrop-blur-md`}
                             >
                                 <div className="p-4 border-b border-gray-200/10 flex justify-between items-center">
-                                    <h3 className="font-semibold text-sm uppercase tracking-wider opacity-70">{translate('Menu')}</h3>
+                                    <h3 className="font-semibold text-sm uppercase tracking-wider opacity-70">{t['Menu']}</h3>
                                     <button
                                         onClick={() => setShowMenu(false)}
                                         className="p-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-full transition-colors"
@@ -135,7 +134,7 @@ export const MainLayout: React.FC = () => {
                                                     }`
                                                 }
                                             >
-                                                <Icon size={18} className={link.path === '/deals' ? 'text-purple-500' : ''} />
+                                                <Icon size={18} />
                                                 <span className="text-sm font-medium">{link.label}</span>
                                             </NavLink>
                                         );
@@ -149,7 +148,7 @@ export const MainLayout: React.FC = () => {
                                             }`}
                                     >
                                         <LogOut size={18} />
-                                        <span className="text-sm font-bold">{translate('Sign Out')}</span>
+                                        <span className="text-sm font-bold">{t['Sign Out']}</span>
                                     </button>
 
                                 </div>
@@ -183,9 +182,9 @@ export const MainLayout: React.FC = () => {
                                         <LogOut size={40} />
                                     </div>
                                     <div className="space-y-2">
-                                        <h3 className="text-2xl font-black">{translate('Ready to leave?')}</h3>
+                                        <h3 className="text-2xl font-black">{t['Ready to leave?']}</h3>
                                         <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed">
-                                            {translate('Log out from')} <span className="font-bold text-gray-900 dark:text-white">SDukaan</span>?
+                                            {t['Log out from']} <span className="font-bold text-gray-900 dark:text-white">SDukaan</span>?
                                         </p>
                                     </div>
                                     <div className="flex flex-col gap-3">
@@ -193,13 +192,13 @@ export const MainLayout: React.FC = () => {
                                             onClick={confirmLogout}
                                             className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-red-500/20 transition-all active:scale-[0.98]"
                                         >
-                                            {translate('Sign Out Now')}
+                                            {t['Sign Out Now']}
                                         </button>
                                         <button
                                             onClick={() => setShowLogoutConfirm(false)}
                                             className="w-full bg-gray-100 dark:bg-gray-800 py-4 rounded-2xl font-bold text-gray-600 dark:text-gray-400 text-sm transition-all"
                                         >
-                                            {translate('Stay Logged In')}
+                                            {t['Stay Logged In']}
                                         </button>
                                     </div>
                                 </div>
