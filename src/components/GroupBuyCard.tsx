@@ -21,7 +21,7 @@ const GroupBuyCard = ({ deal, customerId = 'shop_me', onShowPass, onJoinSuccess 
     const imageUrl = deal.image_url || "https://cdn-icons-png.flaticon.com/512/2921/2921822.png";
 
     // Force the correct anchor shop for the story
-    const anchorShop = (deal.anchorShop && deal.anchorShop !== 'Local Hub') ? deal.anchorShop : "Raju Kirana (200m away)";
+    const anchorShop = (deal.anchorShop && deal.anchorShop !== 'Local Hub') ? deal.anchorShop : "Raju Smart Dukaan (200m away)";
     const marketPrice = deal.marketPrice || 2200;
 
     // Tier Logic
@@ -291,7 +291,7 @@ const GroupBuyCard = ({ deal, customerId = 'shop_me', onShowPass, onJoinSuccess 
 
                         {/* Viral Loop: WhatsApp Share */}
                         <button
-                            onClick={() => window.open(`https://wa.me/?text=Hey! Join this ${productname} deal on KLink. We need ${Math.max(0, targetGoal - currentTotal)} more units to unlock the price!`, '_blank')}
+                            onClick={() => window.open(`https://wa.me/?text=Hey! Join this ${productname} deal on SDukaan. We need ${Math.max(0, targetGoal - currentTotal)} more units to unlock the price!`, '_blank')}
                             className="w-full bg-[#25D366]/10 text-[#25D366] py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-[#25D366]/20 transition-colors"
                         >
                             <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-5 h-5" alt="WA" />

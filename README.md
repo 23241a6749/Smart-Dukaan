@@ -1,19 +1,19 @@
 <div align="center">
-  <img src="https://img.shields.io/badge/KLink-AI%20Powered-orange?style=for-the-badge" alt="KLink Logo" />
-  <h1>KLink: The AI Super-App for Local Retail 🏪</h1>
-  <p>Empowering local Kirana store owners with AI Agentic Workflows, automated debt recovery, and smart inventory management.</p>
+  <img src="https://img.shields.io/badge/SDukaan-AI%20Powered-orange?style=for-the-badge" alt="SDukaan Logo" />
+  <h1>Smart Dukaan: The AI Super-App for Local Retail 🏪</h1>
+  <p>Empowering local Smart Dukaan owners with AI Agentic Workflows, automated debt recovery, and smart inventory management.</p>
 </div>
 
 ---
 
 ## 🚀 Overview
 
-**KLink** is an all-in-one smart management platform built to modernize traditional "Kirana" (local grocery) stores in India. We tackle the biggest pain points of small retailers—such as manual ledger management, pending dues (Khata), and unorganized inventory—by injecting powerful **Gen-AI and Agentic workflows** into their daily operations.
+**Smart Dukaan** is an all-in-one smart management platform built to modernize traditional grocery stores in India. We tackle the biggest pain points of small retailers—such as manual ledger management, pending dues (Khata), and unorganized inventory—by injecting powerful **Gen-AI and Agentic workflows** into their daily operations.
 
 ## ✨ Unique Features
 
 ### 🎙️ 1. AI Voice Auto-Pilot (Smart Debt Recovery)
-The crown jewel of KLink. Recovering pending dues (Khata) is socially awkward and time-consuming for shopkeepers.
+The crown jewel of Smart Dukaan. Recovering pending dues (Khata) is socially awkward and time-consuming for shopkeepers.
 - **Autonomous AI Agent:** Sync overdue Khatas with one click. The AI agent automatically orchestrates a multi-tier recovery pipeline.
 - **Smart WhatsApp Reminders:** Sends polite, localized reminders with deep-linked UPI payments.
 - **Live AI Phone Calls:** If dues remain unpaid, our GPT-4o-mini powered voice agent actually **calls the customer**. It engages in a multi-turn, natural conversation, negotiates extensions, records payment promises, and handles disputes—just like a real Indian shopkeeper.
@@ -63,7 +63,7 @@ The crown jewel of KLink. Recovering pending dues (Khata) is socially awkward an
 1. **Clone the repository:**
    ```bash
    git clone <repo-url>
-   cd KLink
+   cd Smart-Dukaan
    ```
 
 2. **Install dependencies:**

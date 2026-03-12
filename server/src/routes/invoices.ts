@@ -85,7 +85,7 @@ invoiceRouter.post('/import-khata', auth, async (req, res) => {
             // We removed the 'if (!invoice)' skip logic here because the user wants a forced demonstration.
             // The autonomous scheduler is now blocked from double-calling by 'timeSinceContact' logic in Escalation Engine.
             try {
-                const waMessage = `Hello ${invoice.client_name}! 🙏\n\nThis is a friendly reminder from your KiranaLink store.\n\nYou have a pending balance of *₹${invoice.amount}*.\n\nPlease pay at your earliest convenience.\n\n- KiranaLink AI Agent`;
+                const waMessage = `Hello ${invoice.client_name}! 🙏\n\nThis is a friendly reminder from your Smart Dukaan store.\n\nYou have a pending balance of *₹${invoice.amount}*.\n\nPlease pay at your earliest convenience.\n\n- SDukaan AI Agent`;
                 const waStatus = await sendGenericMessage(customer.phoneNumber, waMessage, 'whatsapp');
 
                 invoice.reminder_history.push({

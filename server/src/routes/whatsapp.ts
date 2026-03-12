@@ -468,7 +468,7 @@ function duesMessage(name: string, pending: number, lang: string): string {
 }
 
 function paymentMessage(amount: number, lang: string): string {
-    const upiLink = `upi://pay?pa=kiranalink@oksbi&pn=KiranaLink&am=${amount.toFixed(0)}&cu=INR`;
+    const upiLink = `upi://pay?pa=sdukaan@oksbi&pn=SDukaan&am=${amount.toFixed(0)}&cu=INR`;
     if (lang === 'hi') {
         return `💳 तुरंत भुगतान करें: *₹${amount.toFixed(0)}*\n${upiLink}`;
     }
@@ -982,7 +982,7 @@ router.get('/orders', auth, async (req, res) => {
     try {
         const shopkeeperId = await resolveShopkeeperId((req as any).auth?.userId);
         console.log(`[WhatsApp] GET /orders: auth.userId=${req.auth?.userId}, resolved shopkeeperId=${shopkeeperId}`);
-        
+
         if (!shopkeeperId) {
             res.status(404).json({ message: 'No shopkeeper found for WhatsApp orders' });
             return;

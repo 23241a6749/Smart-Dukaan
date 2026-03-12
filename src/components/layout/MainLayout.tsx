@@ -61,7 +61,7 @@ export const MainLayout: React.FC = () => {
                                     <span className="text-xs font-bold">{user?.name?.[0] || 'S'}</span>
                                 )}
                             </button>
-                            <span className="font-black tracking-tight">KLink</span>
+                            <span className="font-black tracking-tight">SDukaan</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <button
@@ -185,7 +185,7 @@ export const MainLayout: React.FC = () => {
                                     <div className="space-y-2">
                                         <h3 className="text-2xl font-black">{translate('Ready to leave?')}</h3>
                                         <p className="text-sm text-gray-500 dark:text-gray-400 font-medium leading-relaxed">
-                                            {translate('Log out from')} <span className="font-bold text-gray-900 dark:text-white">KLink</span>?
+                                            {translate('Log out from')} <span className="font-bold text-gray-900 dark:text-white">SDukaan</span>?
                                         </p>
                                     </div>
                                     <div className="flex flex-col gap-3">

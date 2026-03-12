@@ -143,7 +143,7 @@ router.post('/', auth, async (req, res) => {
 
             // Send WhatsApp Welcome / OTP notification over Twilio
             const otpCode = Math.floor(100000 + Math.random() * 900000);
-            const welcomeMsg = `Welcome to KiranaLink, ${customer.name || 'valued customer'}! 🎉\nYour Khata account has been successfully linked.\nYour security OTP is: *${otpCode}*\n\nThank you for trusting your local Kirana store!`;
+            const welcomeMsg = `Welcome to SDukaan, ${customer.name || 'valued customer'}! 🎉\nYour Khata account has been successfully linked.\nYour security OTP is: *${otpCode}*\n\nThank you for trusting your local Smart Dukaan!`;
             sendGenericMessage(normalizedPhone, welcomeMsg, 'whatsapp').catch(console.error);
         }
 

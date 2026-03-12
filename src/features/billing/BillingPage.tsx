@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import { useCart } from '../../contexts/CartContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -11,6 +12,8 @@ import { recalculateKhataScore, SCORE_DEFAULT, calculateKhataLimit, getKhataStat
 import { Search, User, Phone, X, ChevronRight, Minus, Plus, Trash2, Award, Download, Share2, MessageCircle } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5001';
 
 export const BillingPage: React.FC = () => {
     const [products, setProducts] = useState<any[]>([]);
@@ -36,6 +39,7 @@ export const BillingPage: React.FC = () => {
     const [otpLoading, setOtpLoading] = useState(false);
     const [latestBillId, setLatestBillId] = useState<string | null>(null);
     const [sendingBillWhatsApp, setSendingBillWhatsApp] = useState(false);
+    const [isGeneratingQr, setIsGeneratingQr] = useState(false);
 
     // Customer identification states
     const [customerInput, setCustomerInput] = useState('');
@@ -71,7 +75,19 @@ export const BillingPage: React.FC = () => {
     useEffect(() => {
         loadProducts();
         loadCustomers();
-    }, []);
+
+        // ── Real-time Payment Listening ──
+        const socket = io(SOCKET_URL);
+        socket.on('payment-success', async (data) => {
+            console.log('Payment success received via socket:', data);
+            // With checkout, payment is verified locally, but webhook can trigger this
+            // We can add logic here if we were using a disconnected QR code.
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [selectedCustomer, cart, cartTotal]);
 
     // Effect: Global Search
     useEffect(() => {
@@ -261,104 +277,91 @@ export const BillingPage: React.FC = () => {
         if (!selectedCustomer) return;
 
         setIsProcessing(true);
-        setAnimationType('online');
 
         try {
-            // ── Step 1: Create order on the server ──────────────────────────
-            const amountInPaise = cartTotal * 100; // Razorpay expects paise
-            const orderRes = await billApi.createRazorpayOrder(amountInPaise);
-            const { orderId, amount, currency, keyId } = orderRes.data;
+            const amountInPaise = cartTotal * 100;
+            const res = await (billApi as any).createRazorpayOrder(amountInPaise);
+            const { orderId, keyId } = res.data;
 
-            // ── Step 2: Open Razorpay Checkout popup ─────────────────────────
-            await new Promise<void>((resolve, reject) => {
-                const options = {
-                    key: keyId,          // rzp_test_... from server
-                    amount,              // in paise
-                    currency,
-                    name: 'KLink Store',
-                    description: `Bill for ${selectedCustomer.name || selectedCustomer.phoneNumber}`,
-                    order_id: orderId,
-                    prefill: {
-                        name: selectedCustomer.name || '',
-                        contact: selectedCustomer.phoneNumber || '',
-                    },
-                    theme: { color: '#16a34a' }, // primary-green
-                    modal: {
-                        // User dismissed the checkout without paying
-                        ondismiss: () => reject(new Error('Payment cancelled by user')),
-                    },
-                    handler: async (response: {
-                        razorpay_payment_id: string;
-                        razorpay_order_id: string;
-                        razorpay_signature: string;
-                    }) => {
-                        try {
-                            // ── Step 3: Verify payment signature on server ──────
-                            const verifyRes = await billApi.verifyRazorpayPayment({
-                                razorpay_order_id: response.razorpay_order_id,
-                                razorpay_payment_id: response.razorpay_payment_id,
-                                razorpay_signature: response.razorpay_signature,
-                                billData: {
-                                    customerPhoneNumber: selectedCustomer.phoneNumber,
-                                    items: cart.map(i => ({
-                                        productId: i._id!,
-                                        quantity: i.quantity,
-                                        price: i.price
-                                    })),
-                                },
-                            });
-                            setLatestBillId(verifyRes.data?.bill?._id || null);
+            const options = {
+                key: keyId,
+                amount: amountInPaise,
+                currency: "INR",
+                name: "SDukaan",
+                description: "Purchase from SDukaan",
+                order_id: orderId,
+                handler: async function (response: any) {
+                    try {
+                        setAnimationType('online');
+                        setShowStatusModal(true);
+                        setIsProcessing(true);
 
-                            // ── Step 4: Sync local Dexie DB (same as cash path) ─
-                            await db.ledger.add({
-                                customerId: selectedCustomer.phoneNumber,
-                                amount: cartTotal,
-                                paymentMode: 'ONLINE' as any,
-                                type: 'debit',
-                                status: 'PAID',
-                                createdAt: Date.now(),
-                                paidAt: Date.now(),
-                                items: cart
-                            });
-                            const localCust = await db.customers
-                                .where('phoneNumber').equals(selectedCustomer.phoneNumber).first();
-                            if (localCust) {
-                                await db.customers.update(localCust.id!, {
-                                    totalTransactions: (localCust.totalTransactions || 0) + 1
-                                });
+                        const verifyRes = await (billApi as any).verifyRazorpayPayment({
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                            billData: {
+                                customerPhoneNumber: selectedCustomer.phoneNumber,
+                                items: cart.map(i => ({ productId: i._id!, quantity: i.quantity, price: i.price }))
                             }
+                        });
 
-                            addToast('UPI Payment Verified & Transaction Complete!', 'success');
-                            loadProducts();
-                            resolve();
-                        } catch (verifyErr: any) {
-                            reject(verifyErr);
+                        setLatestBillId(verifyRes.data.bill?._id || null);
+
+                        await db.ledger.add({
+                            customerId: selectedCustomer.phoneNumber,
+                            amount: cartTotal,
+                            paymentMode: 'ONLINE',
+                            type: 'debit',
+                            status: 'PAID',
+                            createdAt: Date.now(),
+                            paidAt: Date.now(),
+                            items: cart
+                        });
+
+                        const customer = await db.customers.where('phoneNumber').equals(selectedCustomer.phoneNumber).first();
+                        if (customer) {
+                            await db.customers.update(customer.id!, {
+                                totalTransactions: (customer.totalTransactions || 0) + 1
+                            });
                         }
-                    },
-                };
 
-                // window.Razorpay is loaded via the CDN script in index.html
-                const rzp = new window.Razorpay(options);
-                rzp.on('payment.failed', (failureResponse: any) => {
-                    reject(new Error(
-                        failureResponse.error?.description || 'Razorpay payment failed'
-                    ));
-                });
+                        addToast('UPI Payment Successful!', 'success');
+                        loadProducts(); // Refresh local stock
+                        setIsProcessing(false);
+                    } catch (verifyErr: any) {
+                        console.error('[Razorpay Verify Error]', verifyErr);
+                        addToast(verifyErr.response?.data?.message || 'Payment Verification Failed', 'error');
+                        setShowStatusModal(false);
+                        setIsProcessing(false);
+                    }
+                },
+                prefill: {
+                    name: selectedCustomer.name || "",
+                    contact: selectedCustomer.phoneNumber.replace("+91", "")
+                },
+                theme: {
+                    color: "#16a34a"
+                },
+                modal: {
+                    ondismiss: function () {
+                        setIsProcessing(false);
+                    }
+                }
+            };
 
-                // Show the modal AFTER we set up all handlers
-                setShowStatusModal(true);
-                rzp.open();
+            const rzp = new (window as any).Razorpay(options);
+            rzp.on('payment.failed', function (response: any) {
+                console.error('[Razorpay Error]', response.error);
+                addToast(response.error.description || 'Payment Failed', 'error');
+                setIsProcessing(false);
             });
-
-            // If we reach here, payment succeeded → hide spinner, show success ✓
-            setIsProcessing(false);
+            rzp.open();
         } catch (err: any) {
-            console.error('[Razorpay]', err);
+            console.error('[Razorpay Order Error]', err);
+            addToast(err.response?.data?.message || 'Failed to initialize payment gateway', 'error');
             setShowStatusModal(false);
             setIsProcessing(false);
-            if (err.message !== 'Payment cancelled by user') {
-                addToast(err.response?.data?.message || err.message || 'UPI Payment Failed', 'error');
-            }
         }
     };
 
@@ -460,7 +463,7 @@ export const BillingPage: React.FC = () => {
         // 1. Header
         doc.setFontSize(20);
         doc.setTextColor(40, 167, 69); // Green color
-        doc.text("KLink - Retail Invoice", 105, 15, { align: "center" });
+        doc.text("SDukaan - Retail Invoice", 105, 15, { align: "center" });
         doc.setTextColor(0, 0, 0); // Black
 
         // 2. Metadata
@@ -494,7 +497,7 @@ export const BillingPage: React.FC = () => {
         // 4. Footer
         const finalY = (doc as any).lastAutoTable.finalY + 10;
         doc.setFontSize(10);
-        doc.text("Thank you for shopping with KLink!", 105, finalY, { align: "center" });
+        doc.text("Thank you for shopping with SDukaan!", 105, finalY, { align: "center" });
         doc.setFontSize(8);
         doc.setTextColor(150);
         doc.text("Powered by 4Bytes", 105, finalY + 5, { align: "center" });

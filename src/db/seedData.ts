@@ -1,6 +1,6 @@
 import { db, type Product } from './db';
 
-export const kiranaProducts: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>[] = [
+export const smartDukaanProducts: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>[] = [
     // Rice & Grains
     { name: 'Basmati Rice', price: 180, stock: 50, minStock: 10, icon: '🍚', category: 'Rice & Grains', unit: 'kg' },
     { name: 'Sona Masoori Rice', price: 65, stock: 40, minStock: 10, icon: '🍚', category: 'Rice & Grains', unit: 'kg' },
@@ -92,14 +92,14 @@ export const seedProducts = async () => {
 
     if (existingProducts === 0) {
         const timestamp = Date.now();
-        const productsWithTimestamps = kiranaProducts.map(p => ({
+        const productsWithTimestamps = smartDukaanProducts.map(p => ({
             ...p,
             createdAt: timestamp,
             updatedAt: timestamp,
         }));
 
         await db.products.bulkAdd(productsWithTimestamps);
-        console.log('✅ Seeded', kiranaProducts.length, 'kirana products');
+        console.log('✅ Seeded', smartDukaanProducts.length, 'Smart Dukaan products');
     } else {
         console.log('ℹ️ Products already exist, skipping seed');
     }

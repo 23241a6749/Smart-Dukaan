@@ -22,7 +22,7 @@ export interface AIInsights {
 export const generateInsights = async (data: AnalyticsData): Promise<AIInsights> => {
     try {
         const prompt = `
-      You are an expert retail business analyst for a local Kirana (grocery) shop. 
+      You are an expert retail business analyst for a local Smart Dukaan (grocery) shop. 
       Analyze the following sales data and provide actionable strategic insights.
       
       Data:

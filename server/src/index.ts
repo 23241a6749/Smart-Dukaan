@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import dotenv from 'dotenv'; // trigger restart
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 

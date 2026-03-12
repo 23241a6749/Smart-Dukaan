@@ -48,11 +48,11 @@ function buildErrorTwiml(): string {
 // Post-call WhatsApp follow-up with UPI payment link
 async function sendWhatsAppFollowUp(invoice: any, promisedDate?: Date | null) {
     try {
-        const upiUrl = `upi://pay?pa=kiranalink@oksbi&pn=KiranaLink&am=${invoice.amount}&cu=INR`;
+        const upiUrl = `upi://pay?pa=sdukaan@oksbi&pn=SDukaan&am=${invoice.amount}&cu=INR`;
         const promiseLine = promisedDate
             ? `Promise recorded for *${promisedDate.toLocaleDateString('en-IN')}*.`
             : 'Promise noted by our recovery assistant.';
-        const message = `Hi ${invoice.client_name}! Thanks for talking with us.\n\n${promiseLine}\nPending amount: *Rs.${invoice.amount}*\n\nPay via UPI: ${upiUrl}\n\n- KiranaLink AI Agent`;
+        const message = `Hi ${invoice.client_name}! Thanks for talking with us.\n\n${promiseLine}\nPending amount: *Rs.${invoice.amount}*\n\nPay via UPI: ${upiUrl}\n\n- SDukaan AI Agent`;
         const status = await sendGenericMessage(invoice.client_phone, message, 'whatsapp');
         if (status === 'delivered' || status === 'simulated_delivered') {
             console.log(`[Agent] WhatsApp follow-up sent to ${invoice.client_name} (${status})`);
@@ -76,13 +76,13 @@ async function sendWhatsAppSettlementFollowUp(args: {
         const dueDateText = promisedDate ? promisedDate.toLocaleDateString('en-IN') : 'the promised date';
         const immediateAmount = Math.max(0, Math.round(partialAmountNow));
         const upiAmount = immediateAmount > 0 ? immediateAmount : Math.round(invoice.amount);
-        const upiUrl = `upi://pay?pa=kiranalink@oksbi&pn=KiranaLink&am=${upiAmount}&cu=INR`;
+        const upiUrl = `upi://pay?pa=sdukaan@oksbi&pn=SDukaan&am=${upiAmount}&cu=INR`;
 
         const summary = immediateAmount > 0
             ? `Plan confirmed: pay *Rs.${immediateAmount} now* and *Rs.${remainingAmount}* by *${dueDateText}*.`
             : `Plan confirmed: pay full amount *Rs.${remainingAmount}* by *${dueDateText}*.`;
 
-        const message = `Hi ${invoice.client_name},\n\n${summary}\n\nPay now using this UPI link:\n${upiUrl}\n\n- KiranaLink Recovery Agent`;
+        const message = `Hi ${invoice.client_name},\n\n${summary}\n\nPay now using this UPI link:\n${upiUrl}\n\n- SDukaan Recovery Agent`;
         const status = await sendGenericMessage(invoice.client_phone, message, 'whatsapp');
 
         if (status === 'delivered' || status === 'simulated_delivered') {
@@ -232,7 +232,7 @@ intent must be one of: PAYMENT_PROMISED, EXTENSION_REQUESTED, DISPUTE, PARTIAL_P
 Use PARTIAL_PAYMENT when customer states an immediate amount.
 If customer agrees to pay something now but no amount, set wantsPartialPlan=true and partialAmountNow=null.
 Set customerConfirmed=true only when customer clearly confirms previous plan.
-Keep nextBestQuestion short and practical for kirana collection calls.`;
+Keep nextBestQuestion short and practical for Smart Dukaan collection calls.`;
 
         const userPrompt = JSON.stringify({
             stage,
@@ -928,7 +928,7 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
         appendToHistory(invoiceId, 'user', speechResult);
         const history = getHistory(invoiceId);
 
-        const systemPrompt = `You are a Kirana shop owner in India calling your customer ${invoice.client_name} to collect a pending payment of rupees ${invoice.amount}. Be polite and friendly like a real Indian shopkeeper. Talk in short 1-2 sentences only. Do NOT use special characters, emojis, or the rupee symbol. If customer promises to pay, say something like "Thank you, please pay soon. Goodbye!" and add the word END_CALL at the very end. If they ask for more time, say "Okay, I will give you some more days. Please pay soon. Goodbye!" and add END_CALL. If they say the bill is wrong, say "I understand, I will check. Goodbye!" and add END_CALL. Today is ${new Date().toLocaleDateString('en-IN')}.`;
+        const systemPrompt = `You are a Smart Dukaan shop owner in India calling your customer ${invoice.client_name} to collect a pending payment of rupees ${invoice.amount}. Be polite and friendly like a real Indian shopkeeper. Talk in short 1-2 sentences only. Do NOT use special characters, emojis, or the rupee symbol. If customer promises to pay, say something like "Thank you, please pay soon. Goodbye!" and add the word END_CALL at the very end. If they ask for more time, say "Okay, I will give you some more days. Please pay soon. Goodbye!" and add END_CALL. If they say the bill is wrong, say "I understand, I will check. Goodbye!" and add END_CALL. Today is ${new Date().toLocaleDateString('en-IN')}.`;
 
         let aiReply = '';
         try {

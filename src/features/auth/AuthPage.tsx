@@ -67,12 +67,12 @@ export default function AuthPage() {
             >
                 <div className="text-center mb-8">
                     <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center overflow-hidden mx-auto mb-4 shadow-xl border border-gray-100">
-                        <img src={logo} alt="KLink Logo" className="w-full h-full object-cover" />
+                        <img src={logo} alt="SDukaan Logo" className="w-full h-full object-cover" />
                     </div>
                     <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
                         {isLogin ? 'Welcome Back Shopkeeper' : 'Join as a Shop Owner'}
                     </h1>
-                    <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Manage your Kirana with ease</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 font-medium">Manage your Smart Dukaan with ease</p>
                 </div>
 
                 {/* Authentication Tabs */}
@@ -186,7 +186,7 @@ export default function AuthPage() {
                 </button>
 
                 <p className="mt-8 text-center text-xs text-gray-500 dark:text-gray-400 font-medium">
-                    By continuing, you agree to KLink's <span className="text-black dark:text-white font-bold underline cursor-pointer">Terms of Service</span>
+                    By continuing, you agree to SDukaan's <span className="text-black dark:text-white font-bold underline cursor-pointer">Terms of Service</span>
                 </p>
             </motion.div>
         </div>

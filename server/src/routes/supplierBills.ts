@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { Product } from '../models/Product.js';
 import { SupplierBill } from '../models/SupplierBill.js';
 import { auth } from '../middleware/auth.js';
@@ -39,9 +40,9 @@ router.post('/process', auth, async (req, res) => {
         return res.status(400).json({ message: 'Invalid line items' });
     }
 
-    const results = [];
-    const updates = [];
-    const billItems = [];
+    const results: any[] = [];
+    const updates: any[] = [];
+    const billItems: any[] = [];
     let billTotal = 0;
 
     try {

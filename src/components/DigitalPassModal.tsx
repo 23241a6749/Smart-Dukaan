@@ -60,7 +60,7 @@ const DigitalPassModal = ({ order, isOpen, onClose }: { order: Order | null, isO
                             <div className="space-y-3 text-sm">
                                 <div className="flex justify-between">
                                     <span className="text-gray-500 dark:text-gray-400">Shop Name</span>
-                                    <span className="font-bold text-gray-900 dark:text-white">My Kirana Store</span>
+                                    <span className="font-bold text-gray-900 dark:text-white">My Smart Dukaan</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-gray-500 dark:text-gray-400">Item</span>
@@ -87,7 +87,7 @@ const DigitalPassModal = ({ order, isOpen, onClose }: { order: Order | null, isO
                                 <MapPin size={16} className="text-blue-600 dark:text-blue-400 mt-0.5" />
                                 <div className="text-xs">
                                     <p className="font-bold text-blue-900 dark:text-blue-300">Drop Point</p>
-                                    <p className="text-blue-700 dark:text-blue-400">Raju Kirana Store (200m away)</p>
+                                    <p className="text-blue-700 dark:text-blue-400">Raju Smart Dukaan (200m away)</p>
                                 </div>
                             </div>
 

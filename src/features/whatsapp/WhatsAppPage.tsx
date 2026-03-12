@@ -379,7 +379,7 @@ export default function WhatsAppPage() {
                         <p className="text-xs font-black uppercase tracking-[0.35em] text-emerald-100/90">WhatsApp Order Desk</p>
                         <h1 className="mt-3 text-4xl font-black tracking-tight">Voice orders to billing in one lightweight MSME flow.</h1>
                         <p className="mt-3 max-w-2xl text-sm text-emerald-50/90">
-                            Customers send text or voice notes, KiranaLink handles ambiguity, and the shopkeeper confirms quickly with edit-first safety.
+                            Customers send text or voice notes, SDukaan handles ambiguity, and the shopkeeper confirms quickly with edit-first safety.
                         </p>
                     </div>
 
@@ -638,7 +638,7 @@ export default function WhatsAppPage() {
                         <h2 className="text-xl font-black text-slate-900 dark:text-white">Voice + WhatsApp Rules</h2>
                         <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
                             <RuleRow icon={<MessageCircle size={16} />} text="Customer sends text or voice note first on WhatsApp." />
-                            <RuleRow icon={<Mic size={16} />} text="KiranaLink parses items and asks quick 1/2/3 choice for ambiguous products." />
+                            <RuleRow icon={<Mic size={16} />} text="Smart Dukaan parses items and asks quick 1/2/3 choice for ambiguous products." />
                             <RuleRow icon={<PackageCheck size={16} />} text="Shopkeeper can edit items before billing to avoid wrong invoices." />
                             <RuleRow icon={<Bell size={16} />} text="Status updates are auto-message ready/delivered inside free 24h customer window." />
                         </div>

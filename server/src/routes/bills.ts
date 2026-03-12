@@ -12,7 +12,6 @@ import { auth } from '../middleware/auth.js';
 import { recalculateGlobalKhataScore } from '../utils/khataScore.js';
 import twilio from 'twilio';
 import { GSTInvoice } from '../models/GSTInvoice.js';
-import { GSTInvoice } from '../models/GSTInvoice.js';
 import { GSTLedger } from '../models/GSTLedger.js';
 import { calculateInvoice, RawItem } from '../services/gstCalculator.js';
 import { classifyProduct } from '../services/gstClassification.js';
@@ -174,7 +173,7 @@ function buildWhatsAppBillMessage(customerName: string, bill: any) {
         `Payment Type: ${bill.paymentType}`,
         `Date: ${new Date(bill.createdAt).toLocaleString('en-IN')}`,
         '',
-        '- KiranaLink'
+        '- SDukaan'
     ].join('\n');
 }
 
@@ -228,7 +227,7 @@ router.post('/khata/send-otp', auth, async (req, res) => {
             console.log(`[Twilio] Sending OTP via ${isWhatsApp ? 'WhatsApp' : 'SMS'} to ${to} from ${from}...`);
             try {
                 await twilioClient.messages.create({
-                    body: `Your KiranaLink code is ${otp}`, // Pre-approved Sandbox Template pattern
+                    body: `Your SDukaan code is ${otp}`, // Pre-approved Sandbox Template pattern
                     from: from,
                     to: to
                 });
@@ -240,7 +239,7 @@ router.post('/khata/send-otp', auth, async (req, res) => {
                     const fromSms = process.env.TWILIO_PHONE_NUMBER?.replace('whatsapp:', '');
                     if (fromSms) {
                         await twilioClient.messages.create({
-                            body: `Your KiranaLink OTP is: ${otp}`,
+                            body: `Your SDukaan OTP is: ${otp}`,
                             from: fromSms,
                             to: `+91${cleanPhone}`
                         });
@@ -333,6 +332,43 @@ router.post('/razorpay/create-order', auth, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
+// RAZORPAY: Create Dynamic QR Code
+// Generates a dynamic QR code for a specific amount.
+// ─────────────────────────────────────────────
+router.post('/razorpay/create-qr', auth, async (req, res) => {
+    try {
+        const { amount } = req.body; // in paise
+        if (!amount || isNaN(amount) || amount <= 0) {
+            return res.status(400).json({ message: 'Invalid amount' });
+        }
+
+        // Using Razorpay QR Code API
+        // Documentation: https://razorpay.com/docs/payments/qr-codes/use-cases/fixed-amount-custom-usage/
+        const qrCode = await (razorpay as any).qrCode.create({
+            type: 'upi_qr',
+            name: 'SDukaan Bill Payment',
+            usage: 'single_use',
+            fixed_amount: true,
+            payment_amount: Math.round(amount),
+            description: 'SDukaan Payment',
+            notes: {
+                shopkeeperId: req.auth?.userId
+            }
+        });
+
+        res.json({
+            qrId: qrCode.id,
+            image_url: qrCode.image_url,
+            payment_url: qrCode.payment_url,
+            amount: qrCode.payment_amount
+        });
+    } catch (err: any) {
+        console.error('[Razorpay] create-qr error:', err);
+        res.status(500).json({ message: err.error?.description || 'Failed to create Razorpay QR Code' });
+    }
+});
+
+// ─────────────────────────────────────────────
 // RAZORPAY: Verify Payment & Complete Bill
 // Called after the user successfully pays in the Razorpay popup.
 // Verifies the HMAC signature, then creates the bill exactly like a
@@ -376,6 +412,49 @@ router.post('/razorpay/verify-payment', auth, async (req, res) => {
         res.status(400).json({ message: err.message });
     } finally {
         session.endSession();
+    }
+});
+
+// ─────────────────────────────────────────────
+// RAZORPAY: Webhook Handler
+// Handles events like payment.captured, qr_code.paid, etc.
+// ─────────────────────────────────────────────
+router.post('/razorpay/webhook', async (req: any, res) => {
+    // Razorpay Webhook Secret Verification (Optional but recommended)
+    // const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    // ... verification logic ...
+
+    const event = req.body.event;
+    console.log(`[Razorpay Webhook] Received event: ${event}`);
+
+    try {
+        if (event === 'payment.captured' || event === 'qr_code.paid' || event === 'qr_code.credited' || event === 'virtual_account.credited') {
+            const payload = req.body.payload;
+            // Try different paths for the payment data
+            const payment = payload.payment?.entity || payload.qr_code?.entity || payload.virtual_account?.entity;
+
+            if (!payment) {
+                console.warn('[Razorpay Webhook] Could not find entity in payload');
+                return res.json({ status: 'ok' });
+            }
+
+            // amount / amount_paid might vary by event type
+            const amount = (payment.amount || payment.amount_paid || 0) / 100;
+            const notes = payment.notes || {};
+
+            // Handle the payment (e.g., mark bill as paid, notify frontend via Socket.io)
+            if (req.io) {
+                req.io.emit('payment-success', {
+                    paymentId: payment.id,
+                    amount: amount,
+                    notes: notes
+                });
+            }
+        }
+        res.json({ status: 'ok' });
+    } catch (err) {
+        console.error('[Razorpay Webhook] Error:', err);
+        res.status(500).send('Webhook Error');
     }
 });
 

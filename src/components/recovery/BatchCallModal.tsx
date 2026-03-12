@@ -75,7 +75,7 @@ const BatchCallModal = ({ isOpen, onClose, customers }: { isOpen: boolean, onClo
                                 tools: [{ type: "function", function: { name: "updatePromiseDate", description: "date", parameters: { type: "object", properties: { date: { type: "string" } } } } }]
                             },
                             voice: { provider: "11labs", voiceId: "EXAVITQu4vr4xnSDxMaL", model: "eleven_multilingual_v2" },
-                            firstMessage: `Namaskaram ${current.name} andi, nenu KLink store nunchi matladutunnanu.`
+                            firstMessage: `Namaskaram ${current.name} andi, nenu Smart Dukaan store nunchi matladutunnanu.`
                         }
                     })
                 });

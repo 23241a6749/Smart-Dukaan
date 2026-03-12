@@ -102,7 +102,7 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
 
         } else if (channel === 'email') {
             // For email, we expect the LLM might have put 'Subject: ...' at the start
-            let subject = `Invoice Reminder: KiranaLink`;
+            let subject = `Invoice Reminder: Smart Dukaan`;
             let textBody = message;
 
             if (message.toLowerCase().startsWith('subject:')) {
@@ -116,7 +116,7 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
             // so wrap it safely.
             try {
                 await transporter.sendMail({
-                    from: '"KiranaLink Billing" <billing@kiranalink.in>',
+                    from: '"Smart Dukaan Billing" <billing@sdukaan.in>',
                     to: invoice.client_email,
                     subject: subject,
                     text: textBody

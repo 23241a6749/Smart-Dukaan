@@ -99,6 +99,9 @@ export const billApi = {
         razorpay_signature: string;
         billData: { customerPhoneNumber: string; items: Array<{ productId: string; quantity: number; price: number }> };
     }) => api.post('/bills/razorpay/verify-payment', data),
+    // Razorpay: creates a dynamic QR code for instant payment
+    createRazorpayQR: (amountInPaise: number) =>
+        api.post('/bills/razorpay/create-qr', { amount: amountInPaise }),
     sendBillOnWhatsApp: (billId: string) => api.post(`/bills/${billId}/send-whatsapp`),
 };
 

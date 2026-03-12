@@ -56,7 +56,7 @@ router.post('/classify-all', auth, async (req: Request, res: Response) => {
             $or: [{ hsnCode: { $exists: false } }, { gstRate: { $exists: false } }],
         });
 
-        const results = [];
+        const results: any[] = [];
         for (const p of products) {
             const c = await classifyProduct(p.name);
             await Product.updateOne(
@@ -70,7 +70,7 @@ router.post('/classify-all', auth, async (req: Request, res: Response) => {
                     },
                 }
             );
-            results.push({ productId: p._id, name: p.name, ...c });
+            results.push({ productId: p._id, name: p.name, hsnCode: c.hsnCode, gstRate: c.gstRate, normalizedName: c.normalizedName, category: c.category });
         }
 
         return res.json({ classified: results.length, results });

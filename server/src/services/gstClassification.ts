@@ -75,7 +75,7 @@ export async function classifyProduct(productName: string): Promise<GSTClassific
 
 // ── OpenAI classification ─────────────────────────────────────────────────────
 async function classifyViaOpenAI(productName: string, normalized: string): Promise<GSTClassification> {
-    const prompt = `You are an Indian GST expert. Classify the following kirana/grocery product for GST compliance.
+    const prompt = `You are an Indian GST expert. Classify the following Smart Dukaan/grocery product for GST compliance.
 
 Product name: "${productName}"
 
@@ -88,7 +88,7 @@ Return ONLY a valid JSON object with exactly these fields (no markdown, no extra
   "category": "<product category e.g. 'Food & Beverages', 'Spices', 'Dairy', 'Cleaning', etc.>"
 }
 
-Indian GST rules for common kirana items:
+Indian GST rules for common Smart Dukaan items:
 - Unbranded food grains, pulses, flour: 0%
 - Branded/packaged food: 5%
 - Processed food, spices: 5%
@@ -124,7 +124,7 @@ Indian GST rules for common kirana items:
         };
     } catch (err: any) {
         console.error('[GST] OpenAI classification failed, using defaults. Raw:', raw, 'Error:', err.message);
-        // Fallback: most kirana products are 5% GST
+        // Fallback: most Smart Dukaan products are 5% GST
         return {
             name: productName,
             normalizedName: normalized,

@@ -10,7 +10,7 @@ const openai = new OpenAI({
 });
 
 export async function generateMessage(invoice: IInvoice, tone: string, channel: string): Promise<string> {
-    const paymentLink = invoice.payment_link || `https://kiranalink.in/pay/${invoice.invoice_id}`;
+    const paymentLink = invoice.payment_link || `https://sdukaan.in/pay/${invoice.invoice_id}`;
 
     let systemPrompt = `You are an AI debt collection assistant for a small business owner. 
     You need to generate a strictly professional, culturally appropriate collection message in English.
@@ -22,7 +22,7 @@ export async function generateMessage(invoice: IInvoice, tone: string, channel: 
     `;
 
     if (channel === 'call') {
-        systemPrompt += `\nConstraint: This is the OPENING LINE of a live phone call. You are a local shopkeeper calling your customer. You must start the conversation natively like "Hello ji, this is KiranaLink shop, calling for [name]..." Keep it VERY short (1-2 sentences) and end with a question like "When are you planning to pay the ₹[amount]?" Do NOT include URLs or emojis.`;
+        systemPrompt += `\nConstraint: This is the OPENING LINE of a live phone call. You are a local shopkeeper calling your customer. You must start the conversation natively like "Hello ji, this is Smart Dukaan shop, calling for [name]..." Keep it VERY short (1-2 sentences) and end with a question like "When are you planning to pay the ₹[amount]?" Do NOT include URLs or emojis.`;
     } else if (channel === 'sms') {
         systemPrompt += `\nConstraint: Keep the message under 160 characters. Be extremely brief.`;
     } else if (channel === 'whatsapp') {
@@ -50,7 +50,7 @@ export async function generateMessage(invoice: IInvoice, tone: string, channel: 
             if (channel === 'sms') {
                 return `Hi ${invoice.client_name}, you have a pending invoice of ₹${invoice.amount} (${tone}). Pay here: ${paymentLink}`;
             } else {
-                return `Dear ${invoice.client_name},\n\nThis is a ${tone} that your invoice of ₹${invoice.amount} due on ${invoice.due_date.toDateString()} is pending.\n\nPlease pay using this link: ${paymentLink}\n\nThank you,\nKiranaLink Stores`;
+                return `Dear ${invoice.client_name},\n\nThis is a ${tone} that your invoice of ₹${invoice.amount} due on ${invoice.due_date.toDateString()} is pending.\n\nPlease pay using this link: ${paymentLink}\n\nThank you,\nSmart Dukaan Stores`;
             }
         }
     } catch (error) {
