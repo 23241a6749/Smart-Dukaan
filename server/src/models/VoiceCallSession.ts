@@ -30,6 +30,14 @@ const voiceCallSessionSchema = new mongoose.Schema({
     confirmationPending: { type: Boolean, default: false },
     lastPrompt: { type: String, default: '' },
     lastRecordingSid: { type: String, default: '' },
+    detectedLanguage: { type: String, default: 'en' },
+    languageConfidence: { type: Number, default: 0 },
+    isCodeMixed: { type: Boolean, default: false },
+    fallbackMode: {
+        type: String,
+        enum: ['none', 'simple_prompt', 'dtmf', 'manual_callback'],
+        default: 'none',
+    },
     transcriptTurns: { type: [transcriptTurnSchema], default: [] },
     finalSummary: { type: String, default: '' },
 }, { timestamps: true });

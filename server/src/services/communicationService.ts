@@ -1,6 +1,10 @@
 import twilio from 'twilio';
 import nodemailer from 'nodemailer';
 import { IInvoice } from '../models/Invoice.js';
+import { Customer } from '../models/Customer.js';
+import { normalizeLanguage, type VoiceLang } from './voiceLanguage.js';
+import { getVoicePrompt } from './voicePrompts.js';
+import { buildRecordFollowupTwimlLocalized } from './voiceTwiML.js';
 
 // Setup Twilio
 const twilioAvailable = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
@@ -87,8 +91,13 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
                 console.error('[Voice Agent] BACKEND_URL is missing or invalid. It must be public http(s).');
                 return 'failed_config';
             }
-            const prompt = `${safeMessage}. Please tell us clearly when you will pay. Speak after the beep.`;
-            const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">${prompt}</Say><Record action="${backendUrl}/api/invoices/webhook/voice-recording" method="POST" maxLength="25" playBeep="true" timeout="4" trim="trim-silence" /><Say voice="alice" language="en-IN">We could not capture your response. We will call you again later. Goodbye.</Say><Hangup/></Response>`;
+            const customerLang = await resolveCustomerVoiceLanguage(invoice.client_phone);
+            const prompt = `${safeMessage}. ${getVoicePrompt(customerLang, 'opening')}`;
+            const twiml = buildRecordFollowupTwimlLocalized({
+                text: prompt,
+                backendUrl,
+                lang: customerLang,
+            });
 
             await twilioClient.calls.create({
                 twiml: twiml,
@@ -133,6 +142,13 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
         console.error(`Error sending ${channel} notification to ${invoice.client_name}:`, error);
         return 'failed';
     }
+}
+
+async function resolveCustomerVoiceLanguage(phone: string): Promise<VoiceLang> {
+    const last10 = String(phone || '').replace(/[^0-9]/g, '').slice(-10);
+    if (last10.length < 10) return 'en';
+    const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } }).select('preferredVoiceLanguage preferredLanguage').lean();
+    return normalizeLanguage((customer as any)?.preferredVoiceLanguage || (customer as any)?.preferredLanguage || 'en');
 }
 
 export async function sendGenericMessage(phone: string, message: string, channel: string): Promise<string> {

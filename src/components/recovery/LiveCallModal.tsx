@@ -164,14 +164,21 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
                     const remainingText = typeof state.negotiationRemainingAmount === 'number'
                         ? ` | Remaining: ₹${state.negotiationRemainingAmount}`
                         : '';
-                    setInsight(`Stage: ${state.negotiationStage} | Turns: ${state.negotiationTurns || 0}${partialText}${remainingText}`);
+                    const languageText = state.negotiationLanguage
+                        ? ` | Lang: ${String(state.negotiationLanguage).toUpperCase()}`
+                        : '';
+                    const fallbackText = state.negotiationFallbackMode && state.negotiationFallbackMode !== 'none'
+                        ? ` | Fallback: ${state.negotiationFallbackMode}`
+                        : '';
+                    setInsight(`Stage: ${state.negotiationStage} | Turns: ${state.negotiationTurns || 0}${partialText}${remainingText}${languageText}${fallbackText}`);
                 }
 
-                if (state.latestTranscriptLog) {
+                const transcriptLog = state.latestTranscriptLog;
+                if (transcriptLog) {
                     setTranscript((prev) => {
-                        const exists = prev.some((entry) => entry.text === state.latestTranscriptLog);
+                        const exists = prev.some((entry) => entry.text === transcriptLog);
                         if (exists) return prev;
-                        return [...prev, { role: 'user', text: state.latestTranscriptLog }];
+                        return [...prev, { role: 'user', text: transcriptLog }];
                     });
                 }
 
@@ -181,7 +188,11 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
                     setLastUpdate(new Date().toLocaleTimeString());
                     onResultRef.current({
                         status: 'success',
-                        promiseDate: state.promisedDate ? new Date(state.promisedDate).toLocaleDateString('en-IN') : 'Captured',
+                        promiseDate: state.promisedDate
+                            ? new Date(state.promisedDate).toLocaleDateString(
+                                state.negotiationLanguage === 'hi' ? 'hi-IN' : state.negotiationLanguage === 'te' ? 'te-IN' : 'en-IN'
+                            )
+                            : 'Captured',
                     });
                     window.clearInterval(interval);
                 }

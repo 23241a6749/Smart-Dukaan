@@ -8,51 +8,51 @@ import { Customer } from '../models/Customer.js';
 import { VoiceCallSession } from '../models/VoiceCallSession.js';
 import OpenAI from 'openai';
 import { transcribeAudioWithDeepgram } from '../services/deepgram.js';
+import { detectLanguageFromTranscript, getDeepgramLanguage, normalizeLanguage, type VoiceLang } from '../services/voiceLanguage.js';
+import { getVoicePrompt, formatDateForVoice } from '../services/voicePrompts.js';
+import {
+    buildErrorTwimlLocalized,
+    buildGatherTwimlLocalized,
+    buildHangupTwimlLocalized,
+    buildRecordFollowupTwimlLocalized,
+} from '../services/voiceTwiML.js';
 
 export const invoiceWebhooksRouter = Router();
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 
-// Sanitize ANY text for safe inclusion inside TwiML <Say> tags
-function sanitizeForTwiml(text: string): string {
-    return (text || '')
-        .replace(/&/g, ' and ')
-        .replace(/</g, '')
-        .replace(/>/g, '')
-        .replace(/₹/g, 'rupees ')
-        .replace(/"/g, '')
-        .replace(/'/g, '')
-        .replace(/\n/g, '. ')
-        .replace(/\r/g, '')
-        .trim() || 'Thank you. Goodbye.';
+function getSessionLanguage(session?: any, fallback: VoiceLang = 'en'): VoiceLang {
+    return normalizeLanguage(session?.detectedLanguage || fallback);
 }
 
-// Build valid <Gather> TwiML for multi-turn voice conversation
-function buildGatherTwiml(text: string, backendUrl: string, callCount: number = 0): string {
-    const safe = sanitizeForTwiml(text);
-    const nextCount = callCount + 1;
-    return `<?xml version="1.0" encoding="UTF-8"?><Response><Gather input="speech" action="${backendUrl}/api/invoices/webhook/voice?CallCount=${nextCount}" method="POST" timeout="5" speechTimeout="auto" language="en-IN" enhanced="true" speechModel="phone_call"><Say voice="alice" language="en-IN">${safe}</Say></Gather><Say voice="alice" language="en-IN">I did not hear anything. Goodbye.</Say></Response>`;
+function buildGatherTwiml(text: string, backendUrl: string, callCount = 0, lang: VoiceLang = 'en'): string {
+    return buildGatherTwimlLocalized({
+        text,
+        backendUrl,
+        callCount,
+        lang,
+        withDtmfFallback: false,
+    });
 }
 
-// Build valid hangup TwiML
-function buildHangupTwiml(text: string): string {
-    const safe = sanitizeForTwiml(text);
-    return `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">${safe}</Say><Hangup/></Response>`;
+function buildHangupTwiml(text: string, lang: VoiceLang = 'en'): string {
+    return buildHangupTwimlLocalized(text, lang);
 }
 
-// Build error TwiML — guaranteed to never fail
-function buildErrorTwiml(): string {
-    return `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">Sorry, there was a connection issue. We will call you back. Goodbye.</Say><Hangup/></Response>`;
+function buildErrorTwiml(lang: VoiceLang = 'en'): string {
+    return buildErrorTwimlLocalized(lang);
 }
 
 // Post-call WhatsApp follow-up with UPI payment link
-async function sendWhatsAppFollowUp(invoice: any, promisedDate?: Date | null) {
+async function sendWhatsAppFollowUp(invoice: any, promisedDate?: Date | null, lang: VoiceLang = 'en') {
     try {
         const upiUrl = `upi://pay?pa=sdukaan@oksbi&pn=SDukaan&am=${invoice.amount}&cu=INR`;
-        const promiseLine = promisedDate
-            ? `Promise recorded for *${promisedDate.toLocaleDateString('en-IN')}*.`
-            : 'Promise noted by our recovery assistant.';
-        const message = `Hi ${invoice.client_name}! Thanks for talking with us.\n\n${promiseLine}\nPending amount: *Rs.${invoice.amount}*\n\nPay via UPI: ${upiUrl}\n\n- SDukaan AI Agent`;
+        const dateText = promisedDate ? formatDateForVoice(promisedDate, lang) : '';
+        const message = lang === 'hi'
+            ? `Namaste ${invoice.client_name}! Dhanyavaad.\n\n${promisedDate ? `Aapki promise date *${dateText}* note kar li gayi hai.` : 'Aapka payment commitment note kar liya gaya hai.'}\nPending amount: *Rs.${invoice.amount}*\n\nUPI se pay karein: ${upiUrl}\n\n- SDukaan AI Agent`
+            : lang === 'te'
+                ? `Namaskaram ${invoice.client_name}! Dhanyavadalu.\n\n${promisedDate ? `Mee promise date *${dateText}* note chesam.` : 'Mee payment commitment note chesam.'}\nPending amount: *Rs.${invoice.amount}*\n\nUPI link: ${upiUrl}\n\n- SDukaan AI Agent`
+                : `Hi ${invoice.client_name}! Thanks for talking with us.\n\n${promisedDate ? `Promise recorded for *${dateText}*.` : 'Promise noted by our recovery assistant.'}\nPending amount: *Rs.${invoice.amount}*\n\nPay via UPI: ${upiUrl}\n\n- SDukaan AI Agent`;
         const status = await sendGenericMessage(invoice.client_phone, message, 'whatsapp');
         if (status === 'delivered' || status === 'simulated_delivered') {
             console.log(`[Agent] WhatsApp follow-up sent to ${invoice.client_name} (${status})`);
@@ -69,20 +69,33 @@ async function sendWhatsAppSettlementFollowUp(args: {
     partialAmountNow: number;
     remainingAmount: number;
     promisedDate: Date | null;
+    lang?: VoiceLang;
 }) {
-    const { invoice, partialAmountNow, remainingAmount, promisedDate } = args;
+    const { invoice, partialAmountNow, remainingAmount, promisedDate, lang = 'en' } = args;
 
     try {
-        const dueDateText = promisedDate ? promisedDate.toLocaleDateString('en-IN') : 'the promised date';
+        const dueDateText = promisedDate ? formatDateForVoice(promisedDate, lang) : (lang === 'hi' ? 'promise date' : lang === 'te' ? 'promise date' : 'the promised date');
         const immediateAmount = Math.max(0, Math.round(partialAmountNow));
         const upiAmount = immediateAmount > 0 ? immediateAmount : Math.round(invoice.amount);
         const upiUrl = `upi://pay?pa=sdukaan@oksbi&pn=SDukaan&am=${upiAmount}&cu=INR`;
 
         const summary = immediateAmount > 0
-            ? `Plan confirmed: pay *Rs.${immediateAmount} now* and *Rs.${remainingAmount}* by *${dueDateText}*.`
-            : `Plan confirmed: pay full amount *Rs.${remainingAmount}* by *${dueDateText}*.`;
+            ? (lang === 'hi'
+                ? `Plan confirm: *Rs.${immediateAmount} abhi* aur *Rs.${remainingAmount}* *${dueDateText}* tak.`
+                : lang === 'te'
+                    ? `Plan confirm: *Rs.${immediateAmount} ippude* mariyu *Rs.${remainingAmount}* *${dueDateText}* ki.`
+                    : `Plan confirmed: pay *Rs.${immediateAmount} now* and *Rs.${remainingAmount}* by *${dueDateText}*.`)
+            : (lang === 'hi'
+                ? `Plan confirm: poora amount *Rs.${remainingAmount}* *${dueDateText}* tak.`
+                : lang === 'te'
+                    ? `Plan confirm: full amount *Rs.${remainingAmount}* *${dueDateText}* ki.`
+                    : `Plan confirmed: pay full amount *Rs.${remainingAmount}* by *${dueDateText}*.`);
 
-        const message = `Hi ${invoice.client_name},\n\n${summary}\n\nPay now using this UPI link:\n${upiUrl}\n\n- SDukaan Recovery Agent`;
+        const message = lang === 'hi'
+            ? `Namaste ${invoice.client_name},\n\n${summary}\n\nUPI link se pay karein:\n${upiUrl}\n\n- SDukaan Recovery Agent`
+            : lang === 'te'
+                ? `Namaskaram ${invoice.client_name},\n\n${summary}\n\nUPI link dwara pay cheyyandi:\n${upiUrl}\n\n- SDukaan Recovery Agent`
+                : `Hi ${invoice.client_name},\n\n${summary}\n\nPay now using this UPI link:\n${upiUrl}\n\n- SDukaan Recovery Agent`;
         const status = await sendGenericMessage(invoice.client_phone, message, 'whatsapp');
 
         if (status === 'delivered' || status === 'simulated_delivered') {
@@ -95,9 +108,8 @@ async function sendWhatsAppSettlementFollowUp(args: {
     }
 }
 
-function buildRecordFollowupTwiml(text: string, backendUrl: string): string {
-    const safe = sanitizeForTwiml(text);
-    return `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">${safe}</Say><Record action="${backendUrl}/api/invoices/webhook/voice-recording" method="POST" maxLength="25" playBeep="true" timeout="4" trim="trim-silence" /><Say voice="alice" language="en-IN">We could not hear your response clearly. We will follow up later. Goodbye.</Say><Hangup/></Response>`;
+function buildRecordFollowupTwiml(text: string, backendUrl: string, lang: VoiceLang = 'en'): string {
+    return buildRecordFollowupTwimlLocalized({ text, backendUrl, lang });
 }
 
 function fallbackRetryDate(hours = 4): Date {
@@ -122,6 +134,26 @@ async function syncCustomerRecoveryByPhone(phone: string, update: { nextCallDate
     if (typeof update.recoveryNotes !== 'undefined') patch.recoveryNotes = update.recoveryNotes;
 
     await Customer.findByIdAndUpdate(customer._id, { $set: patch });
+}
+
+async function syncCustomerVoiceLanguageByPhone(phone: string, lang: VoiceLang, confidence: number) {
+    const last10 = phone.replace(/[^0-9]/g, '').slice(-10);
+    if (last10.length < 10) return;
+    await Customer.findOneAndUpdate(
+        { phoneNumber: { $regex: new RegExp(`${last10}$`) } },
+        {
+            $set: {
+                preferredVoiceLanguage: lang,
+                voiceLanguageUpdatedAt: new Date(),
+            }
+        }
+    );
+    if (confidence >= 0.75) {
+        await Customer.findOneAndUpdate(
+            { phoneNumber: { $regex: new RegExp(`${last10}$`) } },
+            { $set: { preferredLanguage: lang } }
+        );
+    }
 }
 
 function pickCustomerPhoneFromCall(from: string, to: string): string {
@@ -198,8 +230,9 @@ async function extractNegotiationTurn(args: {
     transcript: string;
     existingPartialAmount: number;
     existingPromisedDate: Date | null;
+    language: VoiceLang;
 }): Promise<NegotiationExtraction> {
-    const { invoiceAmount, stage, transcript, existingPartialAmount, existingPromisedDate } = args;
+    const { invoiceAmount, stage, transcript, existingPartialAmount, existingPromisedDate, language } = args;
 
     const fallbackIntentAnalysis = await classifyIntentAndPromise(transcript);
     const fallbackAmount = parseAmountFallback(transcript, invoiceAmount);
@@ -237,6 +270,7 @@ Keep nextBestQuestion short and practical for Smart Dukaan collection calls.`;
         const userPrompt = JSON.stringify({
             stage,
             transcript,
+            language,
             invoiceAmount,
             existingPartialAmount,
             existingPromisedDate: existingPromisedDate?.toISOString() || null,
@@ -322,7 +356,7 @@ async function applyVoiceIntentOutcome(args: {
             recoveryStatus: 'Promised',
             recoveryNotes: `Promise captured by voice agent (${promiseDate.toDateString()}).`
         });
-        await sendWhatsAppFollowUp(invoice, promiseDate);
+        await sendWhatsAppFollowUp(invoice, promiseDate, 'en');
         await invoice.save();
         return 'Thank you. We have noted your promise. We will send a reminder on your promised date. Goodbye.';
     }
@@ -376,13 +410,19 @@ function computeMinimumPartial(invoiceAmount: number): number {
     return Math.min(invoiceAmount, Math.max(100, Math.round(invoiceAmount * 0.1)));
 }
 
-function formatDateForSpeech(date: Date): string {
-    return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+function formatDateForSpeech(date: Date, lang: VoiceLang = 'en'): string {
+    return formatDateForVoice(date, lang);
 }
 
 async function getOrCreateVoiceSession(callSid: string, invoice: any): Promise<any> {
     const existing = await VoiceCallSession.findOne({ callSid });
     if (existing) return existing;
+
+    const last10 = String(invoice.client_phone || '').replace(/[^0-9]/g, '').slice(-10);
+    const customer = last10.length === 10
+        ? await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } })
+        : null;
+    const initialLang = normalizeLanguage(customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en');
 
     const session = new VoiceCallSession({
         callSid,
@@ -394,6 +434,10 @@ async function getOrCreateVoiceSession(callSid: string, invoice: any): Promise<a
         maxTurns: 6,
         partialAmountNow: 0,
         remainingAmount: Math.max(0, Math.round(invoice.amount || 0)),
+        detectedLanguage: initialLang,
+        languageConfidence: customer ? 0.7 : 0,
+        isCodeMixed: false,
+        fallbackMode: 'none',
     });
     await session.save();
     return session;
@@ -405,8 +449,9 @@ async function finalizeNegotiationSession(args: {
     intent: NegotiationIntent;
     confidence: number;
     transcript: string;
+    lang: VoiceLang;
 }): Promise<string> {
-    const { session, invoice, intent, confidence, transcript } = args;
+    const { session, invoice, intent, confidence, transcript, lang } = args;
 
     const promisedDate = session.promisedDate ? new Date(session.promisedDate) : null;
     const partialAmountNow = clampCurrency(session.partialAmountNow || 0, Math.round(invoice.amount || 0));
@@ -419,8 +464,8 @@ async function finalizeNegotiationSession(args: {
     session.remainingAmount = remainingAmount;
     session.finalSummary = promisedDate
         ? (partialAmountNow > 0
-            ? `Customer committed Rs.${partialAmountNow} now and Rs.${remainingAmount} by ${formatDateForSpeech(promisedDate)}`
-            : `Customer committed full payment by ${formatDateForSpeech(promisedDate)}`)
+            ? `Customer committed Rs.${partialAmountNow} now and Rs.${remainingAmount} by ${formatDateForSpeech(promisedDate, lang)}`
+            : `Customer committed full payment by ${formatDateForSpeech(promisedDate, lang)}`)
         : 'Negotiation incomplete. Promise date not captured.';
     await session.save();
 
@@ -444,7 +489,7 @@ async function finalizeNegotiationSession(args: {
             recoveryNotes: 'Customer raised dispute during multi-turn voice negotiation.'
         });
         await invoice.save();
-        return 'Understood. We have marked your case for manual review by the shopkeeper. Thank you.';
+        return getVoicePrompt(lang, 'closureDispute');
     }
 
     if (!promisedDate) {
@@ -463,7 +508,7 @@ async function finalizeNegotiationSession(args: {
             recoveryStatus: 'Call Again',
             recoveryNotes: 'Call completed but no valid promise date captured. Retry in 1 day.'
         });
-        return 'Thank you. We could not capture a valid payment date. We will call again tomorrow to confirm.';
+        return getVoicePrompt(lang, 'unableToUnderstand');
     }
 
     invoice.status = 'promised';
@@ -473,7 +518,7 @@ async function finalizeNegotiationSession(args: {
     invoice.reminder_history.push({
         timestamp: new Date(),
         channel: 'system',
-        message_content: `[AUTO] Multi-turn plan captured. Partial now: ${partialAmountNow}, Remaining: ${remainingAmount}, Due: ${formatDateForSpeech(promisedDate)}`,
+        message_content: `[AUTO] Multi-turn plan captured. Partial now: ${partialAmountNow}, Remaining: ${remainingAmount}, Due: ${formatDateForSpeech(promisedDate, lang)}`,
         delivery_status: 'delivered'
     });
     await invoice.save();
@@ -482,8 +527,8 @@ async function finalizeNegotiationSession(args: {
         nextCallDate: promisedDate.getTime(),
         recoveryStatus: 'Promised',
         recoveryNotes: partialAmountNow > 0
-            ? `Voice plan: Rs.${partialAmountNow} now and Rs.${remainingAmount} by ${formatDateForSpeech(promisedDate)}.`
-            : `Voice plan: full payment by ${formatDateForSpeech(promisedDate)}.`
+            ? `Voice plan: Rs.${partialAmountNow} now and Rs.${remainingAmount} by ${formatDateForSpeech(promisedDate, lang)}.`
+            : `Voice plan: full payment by ${formatDateForSpeech(promisedDate, lang)}.`
     });
 
     await sendWhatsAppSettlementFollowUp({
@@ -491,12 +536,19 @@ async function finalizeNegotiationSession(args: {
         partialAmountNow,
         remainingAmount,
         promisedDate,
+        lang,
     });
 
     if (partialAmountNow > 0) {
-        return `Thank you. We have noted your plan. Please pay rupees ${partialAmountNow} now and the remaining by ${formatDateForSpeech(promisedDate)}. Goodbye.`;
+        return getVoicePrompt(lang, 'closurePartial', {
+            partialAmount: partialAmountNow,
+            remainingAmount,
+            promisedDateText: formatDateForSpeech(promisedDate, lang),
+        });
     }
-    return `Thank you. We have noted your payment commitment for ${formatDateForSpeech(promisedDate)}. Goodbye.`;
+    return getVoicePrompt(lang, 'closurePromised', {
+        promisedDateText: formatDateForSpeech(promisedDate, lang),
+    });
 }
 
 // ─── TEXT REPLY WEBHOOK ────────────────────────────────────────────────────
@@ -558,7 +610,7 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
     try {
         const backendUrl = process.env.BACKEND_URL || '';
         if (!/^https?:\/\//.test(backendUrl)) {
-            return res.send(buildHangupTwiml('Server callback configuration is incomplete. Please contact shopkeeper.'));
+            return res.send(buildHangupTwiml('Server callback configuration is incomplete. Please contact shopkeeper.', 'en'));
         }
         const from = String(req.body?.From || '');
         const to = String(req.body?.To || '');
@@ -570,16 +622,17 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
         const invoice = await findInvoiceByCallParties(from, to);
         if (!invoice) {
             console.warn('[Voice Recording] No active invoice found for call parties');
-            return res.send(buildHangupTwiml('No active due account found. Goodbye.'));
+            return res.send(buildHangupTwiml(getVoicePrompt('en', 'noInvoice'), 'en'));
         }
         console.log(`[Voice Recording] Matched invoice ${invoice.invoice_id} for ${invoice.client_phone}`);
 
         if (!callSid) {
             console.warn('[Voice Recording] Missing CallSid in webhook payload');
-            return res.send(buildHangupTwiml('Call session was not identified. We will call again later.'));
+            return res.send(buildHangupTwiml(getVoicePrompt('en', 'recordingMissing'), 'en'));
         }
 
         const session = await getOrCreateVoiceSession(callSid, invoice);
+        let activeLang = getSessionLanguage(session, 'en');
 
         if (recordingSid) {
             const sidMarker = `[RECORDING_SID:${recordingSid}]`;
@@ -587,7 +640,7 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
                 || session.transcriptTurns.some((turn: any) => String(turn.text || '').includes(sidMarker));
             if (duplicate) {
                 console.log(`[Voice Recording] Duplicate callback ignored for ${recordingSid}`);
-                return res.send(buildHangupTwiml('Thank you. Goodbye.'));
+                return res.send(buildHangupTwiml('Thank you. Goodbye.', activeLang));
             }
             session.lastRecordingSid = recordingSid;
             session.transcriptTurns.push({ speaker: 'system', text: `${sidMarker} received` });
@@ -613,11 +666,11 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
             session.stage = 'CLOSED';
             session.finalSummary = 'No recording received from Twilio.';
             await session.save();
-            return res.send(buildHangupTwiml('We could not capture your response. We will call you again later. Goodbye.'));
+            return res.send(buildHangupTwiml(getVoicePrompt(activeLang, 'recordingMissing'), activeLang));
         }
 
         if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-            return res.send(buildHangupTwiml('System configuration issue. Please contact shopkeeper. Goodbye.'));
+            return res.send(buildHangupTwiml('System configuration issue. Please contact shopkeeper. Goodbye.', activeLang));
         }
 
         const recordingUrl = recordingUrlRaw.endsWith('.mp3') ? recordingUrlRaw : `${recordingUrlRaw}.mp3`;
@@ -647,14 +700,14 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
             session.stage = 'CLOSED';
             session.finalSummary = 'Recording fetch failed.';
             await session.save();
-            return res.send(buildHangupTwiml('We could not process your response. We will call you again later. Goodbye.'));
+            return res.send(buildHangupTwiml(getVoicePrompt(activeLang, 'recordingFetchFailed'), activeLang));
         }
 
         const audioArrayBuffer = await recordingResponse.arrayBuffer();
         const transcript = await transcribeAudioWithDeepgram({
             audioBuffer: Buffer.from(audioArrayBuffer),
             mimeType: 'audio/mpeg',
-            language: 'multi',
+            language: session.languageConfidence >= 0.6 ? getDeepgramLanguage(activeLang) : 'multi',
         });
         console.log(`[Voice Recording] Deepgram transcript: ${transcript || '[empty]'}`);
 
@@ -677,7 +730,18 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
             session.stage = 'CLOSED';
             session.finalSummary = 'Deepgram transcription failed.';
             await session.save();
-            return res.send(buildHangupTwiml('We could not clearly understand your response. We will call again tomorrow. Goodbye.'));
+            return res.send(buildHangupTwiml(getVoicePrompt(activeLang, 'transcriptionFailed'), activeLang));
+        }
+
+        const detected = await detectLanguageFromTranscript(transcript);
+        const shouldSwitchLang = detected.confidence >= 0.6 || session.languageConfidence < 0.55;
+        if (shouldSwitchLang) {
+            const normalized = normalizeLanguage(detected.lang);
+            session.detectedLanguage = normalized;
+            session.languageConfidence = detected.confidence;
+            session.isCodeMixed = detected.isCodeMixed;
+            activeLang = normalized;
+            await syncCustomerVoiceLanguageByPhone(invoice.client_phone, normalized, detected.confidence);
         }
 
         session.turnCount = (session.turnCount || 0) + 1;
@@ -689,6 +753,7 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
             transcript,
             existingPartialAmount: session.partialAmountNow || 0,
             existingPromisedDate: session.promisedDate || null,
+            language: activeLang,
         });
 
         session.outcomeIntent = extraction.intent;
@@ -715,8 +780,9 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
                 intent: 'PAYMENT_PROMISED',
                 confidence: extraction.confidence,
                 transcript,
+                lang: activeLang,
             });
-            return res.send(buildHangupTwiml(finalText));
+            return res.send(buildHangupTwiml(finalText, activeLang));
         }
 
         if (session.turnCount >= (session.maxTurns || 6)) {
@@ -731,8 +797,9 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
                 intent: finalIntent,
                 confidence: extraction.confidence,
                 transcript,
+                lang: activeLang,
             });
-            return res.send(buildHangupTwiml(finalText));
+            return res.send(buildHangupTwiml(finalText, activeLang));
         }
 
         if (extraction.intent === 'DISPUTE') {
@@ -742,8 +809,9 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
                 intent: 'DISPUTE',
                 confidence: extraction.confidence,
                 transcript,
+                lang: activeLang,
             });
-            return res.send(buildHangupTwiml(finalText));
+            return res.send(buildHangupTwiml(finalText, activeLang));
         }
 
         if (session.stage === 'OPENING') {
@@ -778,8 +846,9 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
                     intent: session.partialAmountNow > 0 ? 'PARTIAL_PAYMENT' : 'PAYMENT_PROMISED',
                     confidence: extraction.confidence,
                     transcript,
+                    lang: activeLang,
                 });
-                return res.send(buildHangupTwiml(finalText));
+                return res.send(buildHangupTwiml(finalText, activeLang));
             }
             if (!session.promisedDate) {
                 session.stage = 'ASK_REMAINING_DATE';
@@ -791,29 +860,66 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
 
         let nextPrompt = extraction.nextBestQuestion;
         if (session.stage === 'ASK_PARTIAL_NOW') {
-            nextPrompt = `Can you pay at least rupees ${minimumPartial} today and the remaining amount by your promised date?`;
+            nextPrompt = getVoicePrompt(activeLang, 'askPartialNow', { minimumPartial });
         } else if (session.stage === 'ASK_PARTIAL_AMOUNT') {
-            nextPrompt = `Please tell me the exact amount you can pay right now. Minimum suggested is rupees ${minimumPartial}.`;
+            nextPrompt = getVoicePrompt(activeLang, 'askPartialAmount', { minimumPartial });
         } else if (session.stage === 'ASK_REMAINING_DATE') {
-            nextPrompt = `Noted. By which date will you pay the remaining amount of rupees ${session.remainingAmount || Math.round(invoice.amount || 0)}?`;
+            nextPrompt = getVoicePrompt(activeLang, 'askRemainingDate', {
+                remainingAmount: session.remainingAmount || Math.round(invoice.amount || 0)
+            });
         } else if (session.stage === 'CONFIRM_PLAN') {
             const partialNow = session.partialAmountNow || 0;
             const remaining = Math.max(0, Math.round(invoice.amount || 0) - partialNow);
             if (!session.promisedDate) {
-                nextPrompt = `Please tell the exact date for paying rupees ${remaining}. For example, tomorrow or after 3 days.`;
+                nextPrompt = getVoicePrompt(activeLang, 'askDateExample', { remainingAmount: remaining });
             } else {
                 const promised = new Date(session.promisedDate);
                 nextPrompt = partialNow > 0
-                    ? `Please confirm: you will pay rupees ${partialNow} now and rupees ${remaining} by ${formatDateForSpeech(promised)}. Is this correct?`
-                    : `Please confirm: you will pay rupees ${remaining} by ${formatDateForSpeech(promised)}. Is this correct?`;
+                    ? getVoicePrompt(activeLang, 'confirmPlanPartial', {
+                        partialAmount: partialNow,
+                        remainingAmount: remaining,
+                        promisedDateText: formatDateForSpeech(promised, activeLang),
+                    })
+                    : getVoicePrompt(activeLang, 'confirmPlanFull', {
+                        remainingAmount: remaining,
+                        promisedDateText: formatDateForSpeech(promised, activeLang),
+                    });
             }
+        }
+
+        if (extraction.confidence < 0.55 && session.turnCount >= 2) {
+            session.fallbackMode = session.turnCount >= 3 ? 'manual_callback' : 'simple_prompt';
+            if (session.fallbackMode === 'manual_callback') {
+                const retry = fallbackRetryDate(8);
+                invoice.next_retry_at = retry;
+                invoice.reminder_history.push({
+                    timestamp: new Date(),
+                    channel: 'system',
+                    message_content: `[AUTO] Low-confidence multilingual capture. Escalated to manual callback.`,
+                    delivery_status: 'delivered'
+                });
+                await invoice.save();
+                await syncCustomerRecoveryByPhone(invoice.client_phone, {
+                    nextCallDate: retry.getTime(),
+                    recoveryStatus: 'Call Again',
+                    recoveryNotes: 'Low-confidence speech capture. Manual callback required.',
+                });
+                session.status = 'failed';
+                session.stage = 'CLOSED';
+                session.finalSummary = 'Low-confidence multi-language capture. Escalated to manual callback.';
+                await session.save();
+                return res.send(buildHangupTwiml(getVoicePrompt(activeLang, 'manualCallback'), activeLang));
+            }
+            nextPrompt = getVoicePrompt(activeLang, 'askDateExample', {
+                remainingAmount: session.remainingAmount || Math.round(invoice.amount || 0),
+            });
         }
 
         session.lastPrompt = nextPrompt;
         session.transcriptTurns.push({ speaker: 'agent', text: nextPrompt });
         await session.save();
 
-        return res.send(buildRecordFollowupTwiml(nextPrompt, backendUrl));
+        return res.send(buildRecordFollowupTwiml(nextPrompt, backendUrl, activeLang));
     } catch (error) {
         console.error('[Voice Recording] Error:', error);
         return res.send(buildErrorTwiml());
@@ -832,11 +938,12 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
     const MAX_CALL_TURNS = 3;
     if (callCount >= MAX_CALL_TURNS) {
         console.log('[Voice] Max call turns reached, ending call');
-        return res.send(buildHangupTwiml('Thank you for your time. We will follow up with you shortly. Goodbye.'));
+        return res.send(buildHangupTwiml('Thank you for your time. We will follow up with you shortly. Goodbye.', 'en'));
     }
 
     try {
         const speechResult = req.body?.SpeechResult || '';
+        const dtmfDigits = String(req.body?.Digits || '');
         const from = req.body?.From || '';
         const to = req.body?.To || '';
 
@@ -855,6 +962,10 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
             const invoice = last10.length === 10
                 ? await Invoice.findOne({ client_phone: { $regex: new RegExp(last10 + '$') }, status: { $in: ['unpaid', 'overdue', 'promised'] } })
                 : null;
+            const customer = last10.length === 10
+                ? await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } })
+                : null;
+            const retryLang = normalizeLanguage(customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en');
 
             // Check if we've tried too many times (either via callCount or no_speech_count)
             const totalAttempts = callCount + (invoice?.no_speech_count || 0);
@@ -878,7 +989,7 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
                         recoveryNotes: 'No speech detected after multiple attempts. Auto retry scheduled.'
                     });
                 }
-                return res.send(buildHangupTwiml('I could not hear your response. We will call you again later. Goodbye.'));
+                return res.send(buildHangupTwiml(getVoicePrompt(retryLang, 'noSpeechFinal'), retryLang));
             }
 
             if (invoice) {
@@ -895,14 +1006,14 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
             }
 
             console.log('[Voice] No speech detected, re-prompting...');
-            return res.send(buildGatherTwiml('Hello, I could not hear you clearly. Please tell me when you can pay your pending amount.', backendUrl, callCount));
+            return res.send(buildGatherTwiml(getVoicePrompt(retryLang, 'noSpeechRetry'), backendUrl, callCount, retryLang));
         }
 
         // Find invoice for this phone number
         const last10 = customerPhone.replace(/[^0-9]/g, '').slice(-10);
         if (!last10 || last10.length < 10) {
             console.log('[Voice] Invalid phone number, hanging up.');
-            return res.send(buildHangupTwiml('Sorry, I could not identify your account. Goodbye.'));
+            return res.send(buildHangupTwiml('Sorry, I could not identify your account. Goodbye.', 'en'));
         }
 
         const invoice = await Invoice.findOne({
@@ -912,12 +1023,38 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
 
         if (!invoice) {
             console.log(`[Voice] No active invoice for phone ...${last10}`);
-            return res.send(buildHangupTwiml('Thank you. We have no pending dues for you. Goodbye.'));
+            return res.send(buildHangupTwiml(getVoicePrompt('en', 'noInvoice'), 'en'));
+        }
+
+        const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } });
+        let activeLang = normalizeLanguage(customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en');
+
+        if (dtmfDigits) {
+            if (dtmfDigits === '1') {
+                invoice.status = 'promised';
+                invoice.promised_date = new Date();
+                invoice.next_retry_at = new Date();
+                await invoice.save();
+                return res.send(buildHangupTwiml(getVoicePrompt(activeLang, 'closurePromised', {
+                    promisedDateText: formatDateForSpeech(new Date(), activeLang),
+                }), activeLang));
+            }
+            if (dtmfDigits === '4') {
+                invoice.status = 'disputed';
+                invoice.next_retry_at = null;
+                await invoice.save();
+                return res.send(buildHangupTwiml(getVoicePrompt(activeLang, 'closureDispute'), activeLang));
+            }
         }
 
         console.log(`[Voice] Found invoice ${invoice.invoice_id} for ${invoice.client_name}`);
 
         const speechConfidence = Number.parseFloat(req.body?.Confidence || '0');
+        const langDetected = await detectLanguageFromTranscript(speechResult);
+        if (langDetected.confidence >= 0.6) {
+            activeLang = normalizeLanguage(langDetected.lang);
+            await syncCustomerVoiceLanguageByPhone(invoice.client_phone, activeLang, langDetected.confidence);
+        }
         const analysis = await classifyIntentAndPromise(speechResult);
         const intent: Intent = analysis.intent;
         const parsedDate = analysis.promisedDate;
@@ -928,7 +1065,7 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
         appendToHistory(invoiceId, 'user', speechResult);
         const history = getHistory(invoiceId);
 
-        const systemPrompt = `You are a Smart Dukaan shop owner in India calling your customer ${invoice.client_name} to collect a pending payment of rupees ${invoice.amount}. Be polite and friendly like a real Indian shopkeeper. Talk in short 1-2 sentences only. Do NOT use special characters, emojis, or the rupee symbol. If customer promises to pay, say something like "Thank you, please pay soon. Goodbye!" and add the word END_CALL at the very end. If they ask for more time, say "Okay, I will give you some more days. Please pay soon. Goodbye!" and add END_CALL. If they say the bill is wrong, say "I understand, I will check. Goodbye!" and add END_CALL. Today is ${new Date().toLocaleDateString('en-IN')}.`;
+        const systemPrompt = `You are a Smart Dukaan shop owner in India calling your customer ${invoice.client_name} to collect a pending payment of rupees ${invoice.amount}. Respond in language ${activeLang}. Be polite and friendly like a local shopkeeper. Keep response short in 1-2 sentences. If customer promises to pay, end with END_CALL. If they ask for more time, end with END_CALL. If they dispute, end with END_CALL. Today is ${new Date().toLocaleDateString('en-IN')}.`;
 
         let aiReply = '';
         try {
@@ -956,7 +1093,7 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
         }
 
         if (!aiReply) {
-            aiReply = 'I did not understand. Please pay your pending dues. Thank you. Goodbye. END_CALL';
+            aiReply = `${getVoicePrompt(activeLang, 'unableToUnderstand')} END_CALL`;
         }
 
         // Save AI reply to memory
@@ -993,7 +1130,7 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
                 invoice.next_retry_at = promisedDate;
                 invoice.reminder_history.push({ timestamp: new Date(), channel: 'system', message_content: `[AUTO] Promised. Next follow-up on ${promisedDate.toDateString()}.`, delivery_status: 'delivered' });
                 // Fire-and-forget WhatsApp follow-up
-                sendWhatsAppFollowUp(invoice, promisedDate).catch(console.error);
+                sendWhatsAppFollowUp(invoice, promisedDate, activeLang).catch(console.error);
                 await syncCustomerRecoveryByPhone(invoice.client_phone, {
                     nextCallDate: promisedDate.getTime(),
                     recoveryStatus: 'Promised',
@@ -1030,12 +1167,12 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
             }
 
             await invoice.save();
-            return res.send(buildHangupTwiml(aiReply));
+            return res.send(buildHangupTwiml(aiReply, activeLang));
         }
 
         // Continue conversation
         await invoice.save();
-        return res.send(buildGatherTwiml(aiReply, backendUrl, callCount));
+        return res.send(buildGatherTwiml(aiReply, backendUrl, callCount, activeLang));
 
     } catch (e) {
         console.error('[Voice] CRITICAL ERROR:', e);

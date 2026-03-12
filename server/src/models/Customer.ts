@@ -16,6 +16,8 @@ const customerSchema = new mongoose.Schema({
     loyaltyPoints: { type: Number, default: 0 },
     totalPurchases: { type: Number, default: 0 },
     preferredLanguage: { type: String, default: 'en' },
+    preferredVoiceLanguage: { type: String, default: 'en' },
+    voiceLanguageUpdatedAt: { type: Date },
     whatsappLastInboundAt: { type: Date },
     whatsappPendingSelection: {
         alias: { type: String },

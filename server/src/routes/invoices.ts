@@ -294,9 +294,14 @@ invoiceRouter.get('/recovery-state/:invoiceId', auth, async (req: Request, res: 
             negotiationRemainingAmount: latestSession?.remainingAmount || null,
             negotiationPromisedDate: latestSession?.promisedDate || null,
             latestSessionCustomerTranscript: latestSessionCustomerTurn?.text || null,
+            negotiationLanguage: latestSession?.detectedLanguage || customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en',
+            negotiationLanguageConfidence: latestSession?.languageConfidence || 0,
+            negotiationCodeMixed: latestSession?.isCodeMixed || false,
+            negotiationFallbackMode: latestSession?.fallbackMode || 'none',
             customerRecoveryStatus: customer?.recoveryStatus || null,
             customerNextCallDate: customer?.nextCallDate || null,
             customerRecoveryNotes: customer?.recoveryNotes || null,
+            customerPreferredVoiceLanguage: customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en',
         });
     } catch (error) {
         console.error('recovery-state error:', error);
