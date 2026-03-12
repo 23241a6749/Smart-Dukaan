@@ -259,9 +259,21 @@ invoiceRouter.get('/recovery-state/:invoiceId', auth, async (req: Request, res: 
             .reverse()
             .find((entry) => entry.channel === 'voice_call' && entry.message_content?.includes('[Deepgram]:'));
 
-        const latestSession = await VoiceCallSession.findOne({ invoiceId: invoice.invoice_id }).sort({ updatedAt: -1 });
-        const latestSessionCustomerTurn = latestSession?.transcriptTurns
-            ? [...latestSession.transcriptTurns].reverse().find((turn: any) => turn.speaker === 'customer')
+        // Get session that was created AFTER the sinceDate to avoid returning old completed sessions
+        const sessionQuery: any = { invoiceId: invoice.invoice_id };
+        if (hasValidSince && sinceDate) {
+            sessionQuery.createdAt = { $gte: sinceDate };
+        }
+        const latestSession = await VoiceCallSession.findOne(sessionQuery).sort({ createdAt: -1 });
+        
+        // If no session found with date filter, try getting any session for this invoice
+        const fallbackSession = !latestSession 
+            ? await VoiceCallSession.findOne({ invoiceId: invoice.invoice_id }).sort({ createdAt: -1 })
+            : null;
+        
+        const activeSession = latestSession || fallbackSession;
+        const latestSessionCustomerTurn = activeSession?.transcriptTurns
+            ? [...activeSession.transcriptTurns].reverse().find((turn: any) => turn.speaker === 'customer')
             : null;
 
         const hasTranscript = Boolean(latestTranscriptHistory);
@@ -286,19 +298,19 @@ invoiceRouter.get('/recovery-state/:invoiceId', auth, async (req: Request, res: 
             latestTranscriptLog: latestTranscriptHistory?.message_content || null,
             latestVoiceAt: latestVoiceHistory?.timestamp || null,
             latestTranscriptAt: latestTranscriptHistory?.timestamp || null,
-            negotiationStage: latestSession?.stage || null,
-            negotiationStatus: latestSession?.status || null,
-            negotiationSummary: latestSession?.finalSummary || null,
-            negotiationTurns: latestSession?.turnCount || 0,
-            negotiationPartialAmountNow: latestSession?.partialAmountNow || 0,
-            negotiationRemainingAmount: latestSession?.remainingAmount || null,
-            negotiationPromisedDate: latestSession?.promisedDate || null,
+            negotiationStage: activeSession?.stage || null,
+            negotiationStatus: activeSession?.status || null,
+            negotiationSummary: activeSession?.finalSummary || null,
+            negotiationTurns: activeSession?.turnCount || 0,
+            negotiationPartialAmountNow: activeSession?.partialAmountNow || 0,
+            negotiationRemainingAmount: activeSession?.remainingAmount || null,
+            negotiationPromisedDate: activeSession?.promisedDate || null,
             latestSessionCustomerTranscript: latestSessionCustomerTurn?.text || null,
-            negotiationLanguage: latestSession?.detectedLanguage || customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en',
-            negotiationLanguageConfidence: latestSession?.languageConfidence || 0,
-            negotiationCodeMixed: latestSession?.isCodeMixed || false,
-            negotiationFallbackMode: latestSession?.fallbackMode || 'none',
-            negotiationLanguageSource: latestSession?.selectedLanguageSource || 'fallback',
+            negotiationLanguage: activeSession?.detectedLanguage || customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en',
+            negotiationLanguageConfidence: activeSession?.languageConfidence || 0,
+            negotiationCodeMixed: activeSession?.isCodeMixed || false,
+            negotiationFallbackMode: activeSession?.fallbackMode || 'none',
+            negotiationLanguageSource: activeSession?.selectedLanguageSource || 'fallback',
             customerRecoveryStatus: customer?.recoveryStatus || null,
             customerNextCallDate: customer?.nextCallDate || null,
             customerRecoveryNotes: customer?.recoveryNotes || null,

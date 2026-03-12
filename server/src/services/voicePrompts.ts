@@ -26,11 +26,13 @@ function fmtAmount(amount: number): string {
 }
 
 function fmtAmountTe(amount: number): string {
-    return `₹${Math.max(0, Math.round(amount))}`;
+    const num = Math.max(0, Math.round(amount));
+    return `${num} rupees`;
 }
 
 function fmtAmountHi(amount: number): string {
-    return `₹${Math.max(0, Math.round(amount))}`;
+    const num = Math.max(0, Math.round(amount));
+    return `${num} rupees`;
 }
 
 export function formatDateForVoice(date: Date, lang: VoiceLang): string {
@@ -87,24 +89,24 @@ const PROMPTS: Record<VoiceLang, Record<PromptKey, (ctx?: Record<string, unknown
         closureDispute: () => 'समझ गए। केस मैनुअल रिव्यू के लिए मार्क किया। धन्यवाद।',
     },
     te: {
-        opening: () => 'Namaskaram. Smart Dukkan nundi call vachindi. Mee baaki eppudu chellistharu?',
-        noSpeechRetry: () => 'Maata vinabadaledu. Beep tarvatha cheppandi.',
-        noSpeechFinal: () => 'Javaabu raka pothite ele unde. Veluam.',
-        askPartialNow: (ctx) => `Netiki ${fmtAmountTe(Number(ctx?.minimumPartial || 0))} isthara?`,
-        askPartialAmount: (ctx) => `Ipudu enta isthari? Kanishtam ${fmtAmountTe(Number(ctx?.minimumPartial || 0))}.`,
+        opening: () => 'Namaste. Smart Dukkan nundi call vachindi. Mee baaki etlaandi?',
+        noSpeechRetry: () => 'Maata kanabadaledu. Beeeep tarvatha cheppandi.',
+        noSpeechFinal: () => 'Javaabu kanabadaledu. Tarwatha call chesthamu. Sugam.',
+        askPartialNow: (ctx) => `Iddaru ${fmtAmountTe(Number(ctx?.minimumPartial || 0))} isthara?`,
+        askPartialAmount: (ctx) => `Ipudu enta isthari? Kanimiki ${fmtAmountTe(Number(ctx?.minimumPartial || 0))}.`,
         askRemainingDate: (ctx) => `${fmtAmountTe(Number(ctx?.remainingAmount || 0))} ela istharu?`,
-        confirmPlanFull: (ctx) => `Confirm: ${fmtAmountTe(Number(ctx?.remainingAmount || 0))} ${String(ctx?.promisedDateText || '')} ku. Avvata?`,
-        confirmPlanPartial: (ctx) => `Confirm: ${fmtAmountTe(Number(ctx?.partialAmount || 0))} ipudu, ${fmtAmountTe(Number(ctx?.remainingAmount || 0))} ${String(ctx?.promisedDateText || '')} ku. Avvata?`,
-        askDateExample: (ctx) => `${fmtAmountTe(Number(ctx?.remainingAmount || 0))} eppudu isthari? Naadi leda 3 rojulo.`,
-        unableToUnderstand: () => 'Artham kaadu. Repu malli call chesthamu. Bai.',
-        manualCallback: () => 'Case shopkeeper ki velthundi. Dhanyavaadalu.',
-        systemError: () => 'Connection lo problem vachindi. Malli call chesthamu. Bai.',
-        noInvoice: () => 'Baaki ledu. Bai.',
-        recordingMissing: () => 'Javaabu record avvakapothe. Malli call chesthamu. Bai.',
-        recordingFetchFailed: () => 'Javaabu process avvakapothe. Malli call chesthamu. Bai.',
-        transcriptionFailed: () => 'Maata arthm kaadu. Repu malli call chesthamu. Bai.',
-        closurePromised: (ctx) => `Dhanyavaadalu. ${String(ctx?.promisedDateText || 'tedi')} ki baaki note chesam. Bai.`,
-        closurePartial: (ctx) => `Dhanyavaadalu. ${fmtAmountTe(Number(ctx?.partialAmount || 0))} ipudu, ${fmtAmountTe(Number(ctx?.remainingAmount || 0))} ${String(ctx?.promisedDateText || '')} ki. Bai.`,
+        confirmPlanFull: (ctx) => `Confirm: ${fmtAmountTe(Number(ctx?.remainingAmount || 0))} ${String(ctx?.promisedDateText || '')} ki. Accha?`,
+        confirmPlanPartial: (ctx) => `Confirm: ${fmtAmountTe(Number(ctx?.partialAmount || 0))} ipudu, ${fmtAmountTe(Number(ctx?.remainingAmount || 0))} ${String(ctx?.promisedDateText || '')} ki. Accha?`,
+        askDateExample: (ctx) => `${fmtAmountTe(Number(ctx?.remainingAmount || 0))} eppudu isthari? Neeokati leda 3 roju lo.`,
+        unableToUnderstand: () => 'Artham kaadu. Repu malli call chesthamu. Sugam.',
+        manualCallback: () => 'Case shopkeeper ki royindhi. Dhanyavaadalu.',
+        systemError: () => 'Connection lo problem undi. Malli call chesthamu. Sugam.',
+        noInvoice: () => 'Baaki ledu. Sugam.',
+        recordingMissing: () => 'Javaabu recording kanabadaledu. Malli call chesthamu. Sugam.',
+        recordingFetchFailed: () => 'Javaabu process ayipoyindi. Malli call chesthamu. Sugam.',
+        transcriptionFailed: () => 'Maata artham kanabadaledu. Repu malli call chesthamu. Sugam.',
+        closurePromised: (ctx) => `Dhanyavaadalu. ${String(ctx?.promisedDateText || 'tedi')} ki baaki nundi chesam. Sugam.`,
+        closurePartial: (ctx) => `Dhanyavaadalu. ${fmtAmountTe(Number(ctx?.partialAmount || 0))} ipudu, ${fmtAmountTe(Number(ctx?.remainingAmount || 0))} ${String(ctx?.promisedDateText || '')} ki. Sugam.`,
         closureDispute: () => 'Artham. Case manual review ki pampam. Dhanyavaadalu.',
     },
     ta: {} as Record<PromptKey, (ctx?: Record<string, unknown>) => string>,

@@ -75,35 +75,20 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
                 return 'skipped_non_target';
             }
 
-            // Sanitize for TwiML XML
-            const safeMessage = (message || '')
-                .replace(/&/g, ' and ')
-                .replace(/</g, '')
-                .replace(/>/g, '')
-                .replace(/₹/g, 'rupees ')
-                .replace(/"/g, '')
-                .replace(/'/g, '')
-                .replace(/\n/g, '. ')
-                .replace(/\r/g, '')
-                .trim();
-
-            // Voice agent: prompt + recording, transcript is handled by Deepgram in webhook.
+            // Voice agent: Use ONLY the localized prompt (not the English message)
+            // The voice prompt already contains the complete message in the customer's language
             const backendUrl = process.env.BACKEND_URL || '';
             if (!/^https?:\/\//.test(backendUrl)) {
                 console.error('[Voice Agent] BACKEND_URL is missing or invalid. It must be public http(s).');
                 return 'failed_config';
             }
             const voiceCtx = await resolveCustomerVoiceContext(invoice.client_phone);
-            const menuHint = voiceCtx.enableMenu
-                ? (voiceCtx.lang === 'te'
-                    ? ' భాష: Telugu, Hindi, or English చెబుతారు.'
-                    : voiceCtx.lang === 'hi'
-                    ? ' भाषा: Hindi, English, या Telugu बोलिए.'
-                    : ' Language: say Hindi, English, or Telugu.')
-                : '';
-            const prompt = `${safeMessage}. ${getVoicePrompt(voiceCtx.lang, 'opening')}${menuHint}`;
+            
+            // Generate fully localized opening prompt (no English mixing)
+            const localizedPrompt = getVoicePrompt(voiceCtx.lang, 'opening');
+            
             const twiml = buildRecordFollowupTwimlLocalized({
-                text: prompt,
+                text: localizedPrompt,
                 backendUrl,
                 lang: voiceCtx.lang,
             });
