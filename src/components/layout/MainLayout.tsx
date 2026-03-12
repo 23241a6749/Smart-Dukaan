@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Store, Users, Package, TrendingUp, CreditCard, Menu, X, Gift, BookOpen, LogOut, Phone, MessageCircle, FileText, Landmark } from 'lucide-react';
+import { Store, Users, Package, TrendingUp, CreditCard, Menu, X, Gift, BookOpen, LogOut, Phone, MessageCircle, Landmark } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -33,15 +33,14 @@ export const MainLayout: React.FC = () => {
         { path: '/', label: translate('Billing'), icon: Store },
         { path: '/products', label: translate('Products'), icon: Package },
         { path: '/customers', label: translate('Customers'), icon: Users },
-        { path: '/whatsapp', label: translate('WhatsApp Desk'), icon: MessageCircle },
-        { path: '/deals', label: translate('Group Buy'), icon: Gift },
-        { path: '/supplier-bills', label: translate('Supplier Bills'), icon: FileText },
-        { path: '/recovery', label: translate('Legacy Agent'), icon: Phone },
-        { path: '/khata', label: translate('Udhaar'), icon: CreditCard },
+        { path: '/recovery', label: translate('Recovery Agent'), icon: Phone },
         { path: '/records', label: translate('Records'), icon: BookOpen },
+        { path: '/khata', label: translate('Udhaar'), icon: CreditCard },
+        { path: '/deals', label: translate('Group Buy'), icon: Gift },
+        { path: '/expiry', label: translate('Expiry & Waste'), icon: Package },
         { path: '/analytics', label: translate('Analytics'), icon: TrendingUp },
         { path: '/gst', label: translate('GST & ITR'), icon: Landmark },
-        { path: '/expiry', label: translate('Expiry & Waste'), icon: Package },
+        { path: '/whatsapp', label: translate('WhatsApp Desk'), icon: MessageCircle },
     ];
 
     return (
@@ -135,7 +134,7 @@ export const MainLayout: React.FC = () => {
                                                     }`
                                                 }
                                             >
-                                                <Icon size={18} className={link.path === '/deals' ? 'text-purple-500' : ''} />
+                                                <Icon size={18} />
                                                 <span className="text-sm font-medium">{link.label}</span>
                                             </NavLink>
                                         );

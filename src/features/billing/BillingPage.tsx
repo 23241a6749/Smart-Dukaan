@@ -743,10 +743,26 @@ export const BillingPage: React.FC = () => {
                         >
                             <X size={24} />
                         </button>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white text-center flex-1 pr-8">
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white text-center flex-1">
                             {checkoutStep === 'SUMMARY' ? 'Order Summary' :
                                 checkoutStep === 'CUSTOMER' ? 'Identify Customer' : 'Select Payment'}
                         </h2>
+                        {checkoutStep === 'SUMMARY' && (
+                            <button
+                                onClick={() => {
+                                    if (window.confirm('Are you sure you want to clear the entire cart?')) {
+                                        clearCart();
+                                        closeCheckout();
+                                        addToast('Cart cleared', 'info');
+                                    }
+                                }}
+                                className="p-2 -mr-2 text-gray-400 hover:text-red-500 transition-colors"
+                                title="Clear All"
+                            >
+                                <Trash2 size={24} />
+                            </button>
+                        )}
+                        {checkoutStep !== 'SUMMARY' && <div className="w-10" />} {/* Spacer for balance */}
                     </div>
 
                     {/* Step 1: SUMMARY */}

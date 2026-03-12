@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, ShieldCheck, Zap, ArrowRight } from 'lucide-react';
+import { Phone, ShieldCheck, Zap, ArrowRight, Clock3 } from 'lucide-react';
 import DefaulterCard from '../../components/recovery/DefaulterCard';
 import LiveCallModal, { type RecoveryCustomer } from '../../components/recovery/LiveCallModal';
 import RecoveryMissionControl from '../../components/recovery/RecoveryMissionControl';
@@ -89,64 +89,82 @@ export default function RecoveryPage() {
     const totalPending = (allCustomers?.filter((c: Customer) => c.khataBalance > 0) || []).reduce((sum: number, d: Customer) => sum + d.khataBalance, 0);
 
     return (
-        <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 pb-48 font-sans text-gray-900">
+        <div className="min-h-screen bg-[#F8F9FA] dark:bg-[#0A0A0A] pb-48 font-sans text-gray-900">
             {/* CLEAN HERO SECTION */}
-            <div className="bg-white dark:bg-gray-800 pt-6 pb-8 px-6 rounded-b-3xl shadow-sm border-b border-gray-100 dark:border-gray-700">
-                {/* Top Row: Title + Status */}
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-xl font-bold flex items-center gap-2 text-gray-800 dark:text-white">
-                        <ShieldCheck className="text-blue-600 h-6 w-6" /> Recovery Agent
-                    </h1>
+            <div className="bg-white dark:bg-[#111111] pt-8 pb-10 px-6 rounded-b-[2rem] shadow-sm border-b border-gray-100 dark:border-white/5">
+                <div className="max-w-5xl mx-auto">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h1 className="text-2xl font-black flex items-center gap-3 text-gray-900 dark:text-white tracking-tight">
+                                <div className="p-2.5 bg-primary-green rounded-xl text-white">
+                                    <ShieldCheck size={24} />
+                                </div>
+                                Recovery Agent
+                            </h1>
+                        </div>
+                    </div>
 
-                </div>
-
-                {/* Minimal Stats Card */}
-                <div className="bg-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-blue-200 dark:shadow-none">
-                    <p className="text-blue-100 text-xs font-medium uppercase tracking-wide mb-1">Total Recoverable</p>
-                    <h2 className="text-3xl font-bold tracking-tight">₹{totalPending.toLocaleString()}</h2>
+                    <div className="bg-gradient-to-br from-primary-green to-emerald-700 rounded-[1.5rem] p-6 text-white shadow-xl shadow-primary-green/20 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all duration-700"></div>
+                        <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div>
+                                <p className="text-green-100 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Total Outstanding</p>
+                                <h2 className="text-4xl font-black tracking-tighter">₹{totalPending.toLocaleString()}</h2>
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 text-center min-w-[100px]">
+                                    <p className="text-[8px] uppercase font-black opacity-60">Success</p>
+                                    <p className="text-lg font-black">94%</p>
+                                </div>
+                                <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 text-center min-w-[100px]">
+                                    <p className="text-[8px] uppercase font-black opacity-60">Avg. Days</p>
+                                    <p className="text-lg font-black">12d</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* MAIN CONTENT */}
-            <div className="px-4 -mt-6 relative z-10">
-                {/* Clean Tabs */}
-                <div className="bg-white dark:bg-gray-800 p-1 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex gap-1 mb-5">
+            <div className="max-w-5xl mx-auto px-4 -mt-6 relative z-10">
+                {/* Segmented Control */}
+                <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl p-1 rounded-[1.2rem] shadow-lg border border-gray-100 dark:border-white/5 flex gap-1 mb-6">
                     <button
                         onClick={() => setViewMode('ACTION')}
-                        className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${viewMode === 'ACTION'
-                            ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-                            : 'text-gray-400 hover:text-gray-600'
+                        className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${viewMode === 'ACTION'
+                            ? 'bg-primary-green text-white shadow-md'
+                            : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
                             }`}
                     >
-                        Action ({actionQueue.length})
+                        Pending ({actionQueue.length})
                     </button>
                     <button
                         onClick={() => setViewMode('SCHEDULED')}
-                        className={`flex-1 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${viewMode === 'SCHEDULED'
-                            ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-                            : 'text-gray-400 hover:text-gray-600'
+                        className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all duration-300 ${viewMode === 'SCHEDULED'
+                            ? 'bg-primary-green text-white shadow-md'
+                            : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
                             }`}
                     >
-                        Scheduled ({scheduledQueue.length})
+                        Follow-ups ({scheduledQueue.length})
                     </button>
                 </div>
 
-                {/* MISSION CONTROL (Minimal) */}
+                {/* MISSION CONTROL BUTTON (Refined) */}
                 {viewMode === 'ACTION' && actionQueue.length > 0 && (
                     <button
                         onClick={() => setIsMissionControlOpen(true)}
-                        className="w-full bg-black dark:bg-gray-700 text-white p-4 rounded-xl shadow-md mb-5 flex items-center justify-between active:scale-95 transition-all"
+                        className="w-full relative overflow-hidden bg-white dark:bg-[#111111] p-4 rounded-[1.2rem] shadow-sm border border-gray-100 dark:border-white/5 mb-6 flex items-center justify-between group active:scale-[0.98] transition-all"
                     >
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center">
-                                <Zap size={16} className="text-yellow-400" />
+                        <div className="flex items-center gap-4 relative z-10">
+                            <div className="w-10 h-10 bg-primary-green/10 rounded-lg flex items-center justify-center text-primary-green group-hover:scale-110 transition-transform">
+                                <Zap size={20} fill="currentColor" />
                             </div>
                             <div className="text-left">
-                                <h4 className="font-bold text-sm">Auto-Call List</h4>
-                                <p className="text-[10px] text-gray-400">{actionQueue.length} customers pending</p>
+                                <h4 className="font-black text-sm text-gray-900 dark:text-white">AI Voice Control</h4>
+                                <p className="text-[10px] text-gray-500 font-bold">Automated recovery for {actionQueue.length} customers</p>
                             </div>
                         </div>
-                        <ArrowRight size={16} />
+                        <ArrowRight size={18} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
                     </button>
                 )}
 
@@ -155,33 +173,36 @@ export default function RecoveryPage() {
                     {displayCustomers.length > 0 ? (
                         displayCustomers.map((customer: any) => (
                             viewMode === 'SCHEDULED' ? (
-                                // === SCHEDULED CARD (Simple & Neat) ===
-                                <div key={customer.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-4">
-                                        <div className="shrink-0 flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-700 w-12 h-12 rounded-lg">
-                                            <span className="text-[10px] uppercase font-bold text-gray-500">
+                                // === SCHEDULED CARD ===
+                                <div key={customer.id} className="bg-white dark:bg-[#111111] p-4 rounded-[1.2rem] border border-gray-100 dark:border-white/5 flex items-center justify-between gap-4 shadow-sm h-22">
+                                    <div className="flex items-center gap-4 flex-1">
+                                        <div className="shrink-0 flex flex-col items-center justify-center bg-gray-50 dark:bg-white/5 w-12 h-12 rounded-xl border border-gray-100 dark:border-white/10 text-primary-green">
+                                            <span className="text-[8px] uppercase font-black opacity-60">
                                                 {customer.nextCallDate ? new Date(customer.nextCallDate).toLocaleString('en-US', { month: 'short' }) : 'FUT'}
                                             </span>
-                                            <span className="text-lg font-bold text-gray-900 dark:text-white">
+                                            <span className="text-lg font-black leading-none">
                                                 {customer.nextCallDate ? new Date(customer.nextCallDate).getDate() : '?'}
                                             </span>
                                         </div>
-                                        <div>
-                                            <h3 className="font-bold text-gray-900 dark:text-white text-sm mb-0.5">{customer.name}</h3>
-                                            <p className="text-xs text-gray-500">
-                                                <span className="font-medium text-gray-900 dark:text-gray-300">₹{customer.amount.toLocaleString()}</span> • {customer.nextCallDate ? new Date(customer.nextCallDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                            </p>
+                                        <div className="min-w-0">
+                                            <h3 className="font-black text-gray-900 dark:text-white text-sm truncate">{customer.name}</h3>
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <span className="text-xs font-black text-primary-green">₹{customer.amount.toLocaleString()}</span>
+                                                <span className="text-[9px] text-gray-400 font-bold uppercase flex items-center gap-1">
+                                                    <Clock3 size={10} /> {customer.nextCallDate ? new Date(customer.nextCallDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                     <button
                                         onClick={() => setActiveCall(customer)}
-                                        className="shrink-0 w-10 h-10 bg-green-500 hover:bg-green-600 text-white rounded-full flex items-center justify-center shadow-md active:scale-95 transition-all"
+                                        className="shrink-0 w-10 h-10 bg-primary-green text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary-green/20 active:scale-95 transition-all"
                                     >
-                                        <Phone size={18} className="fill-current" />
+                                        <Phone size={18} fill="currentColor" />
                                     </button>
                                 </div>
                             ) : (
-                                // === ACTION CARD (Wrapped) ===
+                                // === ACTION CARD ===
                                 <div key={customer.id} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                                     <DefaulterCard
                                         customer={customer}
@@ -191,9 +212,10 @@ export default function RecoveryPage() {
                             )
                         ))
                     ) : (
-                        <div className="flex flex-col items-center justify-center py-16 opacity-40 text-center">
-                            <ShieldCheck className="text-gray-400 mb-2" size={32} />
-                            <p className="text-xs text-gray-400 font-medium">No pending tasks.</p>
+                        <div className="flex flex-col items-center justify-center py-20 opacity-30 text-center">
+                            <ShieldCheck className="text-gray-400 mb-4" size={48} />
+                            <h3 className="text-lg font-black text-gray-900 dark:text-white">All Clear</h3>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">No actions required</p>
                         </div>
                     )}
                 </div>

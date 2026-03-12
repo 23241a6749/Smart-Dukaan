@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
     AlertCircle,
-    BookOpen,
     Calculator,
     ChevronDown,
     FileText,
@@ -9,11 +8,9 @@ import {
     Landmark,
     Loader2,
     RefreshCcw,
-    ShieldCheck,
     Sparkles,
     TrendingDown,
     TrendingUp,
-    Zap,
 } from 'lucide-react';
 import { gstApi } from '../../services/api';
 import type { GSTSummary, ITRSummary } from '../../services/api';
@@ -280,27 +277,6 @@ export default function GSTReportPage() {
                         )}
                     </div>
 
-                    {/* ── Info Cards ── */}
-                    <div className="grid gap-4 md:grid-cols-3">
-                        <InfoCard
-                            icon={<Zap size={18} />}
-                            title="Auto CGST + SGST"
-                            body="Every bill automatically splits GST into equal CGST and SGST components, matching GSTR-1 format."
-                            color="bg-violet-50 dark:bg-violet-900/10 text-violet-700 dark:text-violet-300"
-                        />
-                        <InfoCard
-                            icon={<ShieldCheck size={18} />}
-                            title="HSN-Backed Rates"
-                            body='Products are classified using their HSN code and OpenAI. Results are cached — "classify once, reuse forever".'
-                            color="bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 dark:text-emerald-300"
-                        />
-                        <InfoCard
-                            icon={<BookOpen size={18} />}
-                            title="Input Tax Credit"
-                            body="GST paid on supplier purchases is tracked as Input Credit, automatically reducing your net payable amount."
-                            color="bg-amber-50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300"
-                        />
-                    </div>
                 </>
             )}
 
@@ -314,12 +290,4 @@ export default function GSTReportPage() {
     );
 }
 
-function InfoCard({ icon, title, body, color }: { icon: React.ReactNode; title: string; body: string; color: string }) {
-    return (
-        <div className="rounded-3xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
-            <div className={`mb-3 inline-flex rounded-2xl p-3 ${color}`}>{icon}</div>
-            <h3 className="mb-1 font-black text-gray-900 dark:text-white">{title}</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{body}</p>
-        </div>
-    );
-}
+

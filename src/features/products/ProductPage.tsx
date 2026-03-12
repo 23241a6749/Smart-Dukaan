@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, AlertTriangle, Edit2, X, Package, Tag, Archive } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { productApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -20,6 +21,7 @@ export const ProductPage: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const { addToast } = useToast();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({ name: '', price: 0, stock: 0, minStock: 5, category: '', icon: '📦', unit: 'piece' });
 
   useEffect(() => {
@@ -88,11 +90,7 @@ export const ProductPage: React.FC = () => {
           <p className="text-gray-500 text-sm font-medium">Manage prices, stock, and categories</p>
         </div>
         <button
-          onClick={() => {
-            setShowForm(true);
-            setEditingId(null);
-            setFormData({ name: '', price: 0, stock: 0, minStock: 5, category: '', icon: '📦', unit: 'piece' });
-          }}
+          onClick={() => navigate('/supplier-bills')}
           className="bg-primary-green text-white px-6 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg shadow-green-200 dark:shadow-none hover:scale-105 transition-transform"
         >
           <Plus size={20} /> Add Product
