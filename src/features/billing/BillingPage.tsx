@@ -39,7 +39,6 @@ export const BillingPage: React.FC = () => {
     const [otpLoading, setOtpLoading] = useState(false);
     const [latestBillId, setLatestBillId] = useState<string | null>(null);
     const [sendingBillWhatsApp, setSendingBillWhatsApp] = useState(false);
-    const [isGeneratingQr, setIsGeneratingQr] = useState(false);
 
     // Customer identification states
     const [customerInput, setCustomerInput] = useState('');
@@ -311,7 +310,7 @@ export const BillingPage: React.FC = () => {
                         await db.ledger.add({
                             customerId: selectedCustomer.phoneNumber,
                             amount: cartTotal,
-                            paymentMode: 'ONLINE',
+                            paymentMode: 'UPI',
                             type: 'debit',
                             status: 'PAID',
                             createdAt: Date.now(),
