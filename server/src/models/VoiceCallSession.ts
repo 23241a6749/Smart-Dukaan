@@ -38,6 +38,12 @@ const voiceCallSessionSchema = new mongoose.Schema({
         enum: ['none', 'simple_prompt', 'dtmf', 'manual_callback'],
         default: 'none',
     },
+    selectedLanguageSource: {
+        type: String,
+        enum: ['customer', 'shop_default', 'location', 'ivr', 'detected', 'fallback'],
+        default: 'fallback',
+    },
+    languageSwitchCount: { type: Number, default: 0 },
     transcriptTurns: { type: [transcriptTurnSchema], default: [] },
     finalSummary: { type: String, default: '' },
 }, { timestamps: true });

@@ -167,10 +167,16 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
                     const languageText = state.negotiationLanguage
                         ? ` | Lang: ${String(state.negotiationLanguage).toUpperCase()}`
                         : '';
+                    const sourceText = state.negotiationLanguageSource
+                        ? ` | Source: ${state.negotiationLanguageSource}`
+                        : '';
+                    const lockText = state.customerVoiceLanguageLocked
+                        ? ' | Locked'
+                        : '';
                     const fallbackText = state.negotiationFallbackMode && state.negotiationFallbackMode !== 'none'
                         ? ` | Fallback: ${state.negotiationFallbackMode}`
                         : '';
-                    setInsight(`Stage: ${state.negotiationStage} | Turns: ${state.negotiationTurns || 0}${partialText}${remainingText}${languageText}${fallbackText}`);
+                    setInsight(`Stage: ${state.negotiationStage} | Turns: ${state.negotiationTurns || 0}${partialText}${remainingText}${languageText}${sourceText}${lockText}${fallbackText}`);
                 }
 
                 const transcriptLog = state.latestTranscriptLog;

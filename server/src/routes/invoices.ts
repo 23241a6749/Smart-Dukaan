@@ -298,10 +298,15 @@ invoiceRouter.get('/recovery-state/:invoiceId', auth, async (req: Request, res: 
             negotiationLanguageConfidence: latestSession?.languageConfidence || 0,
             negotiationCodeMixed: latestSession?.isCodeMixed || false,
             negotiationFallbackMode: latestSession?.fallbackMode || 'none',
+            negotiationLanguageSource: latestSession?.selectedLanguageSource || 'fallback',
             customerRecoveryStatus: customer?.recoveryStatus || null,
             customerNextCallDate: customer?.nextCallDate || null,
             customerRecoveryNotes: customer?.recoveryNotes || null,
             customerPreferredVoiceLanguage: customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en',
+            customerVoiceLanguageLocked: Boolean(customer?.lockVoiceLanguage),
+            customerLastDetectedVoiceLanguage: customer?.lastDetectedVoiceLanguage || null,
+            customerLastVoiceLanguageConfidence: customer?.lastVoiceLanguageConfidence || 0,
+            customerVoiceLanguageSource: customer?.voiceLanguageSource || 'shop_default',
         });
     } catch (error) {
         console.error('recovery-state error:', error);

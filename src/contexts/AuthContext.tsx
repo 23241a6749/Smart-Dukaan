@@ -7,6 +7,11 @@ interface User {
     username?: string;
     email: string;
     avatar?: string;
+    defaultVoiceLanguage?: string;
+    fallbackVoiceLanguage?: string;
+    voiceLanguagePolicy?: 'manual' | 'hybrid' | 'auto';
+    enableVoiceLanguageMenu?: boolean;
+    supportedVoiceLanguages?: string[];
 }
 
 interface AuthContextType {

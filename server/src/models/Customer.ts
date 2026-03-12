@@ -17,6 +17,14 @@ const customerSchema = new mongoose.Schema({
     totalPurchases: { type: Number, default: 0 },
     preferredLanguage: { type: String, default: 'en' },
     preferredVoiceLanguage: { type: String, default: 'en' },
+    lockVoiceLanguage: { type: Boolean, default: false },
+    lastDetectedVoiceLanguage: { type: String },
+    lastVoiceLanguageConfidence: { type: Number, default: 0 },
+    voiceLanguageSource: {
+        type: String,
+        enum: ['manual', 'shop_default', 'detected', 'ivr'],
+        default: 'shop_default'
+    },
     voiceLanguageUpdatedAt: { type: Date },
     whatsappLastInboundAt: { type: Date },
     whatsappPendingSelection: {

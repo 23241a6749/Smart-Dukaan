@@ -24,6 +24,11 @@ export interface Customer {
     khataScore?: number;
     khataLimit?: number;
     isLocal?: boolean;
+    preferredVoiceLanguage?: string;
+    lockVoiceLanguage?: boolean;
+    lastDetectedVoiceLanguage?: string;
+    lastVoiceLanguageConfidence?: number;
+    voiceLanguageSource?: 'manual' | 'shop_default' | 'detected' | 'ivr';
 }
 
 export interface WhatsAppOrderItem {
@@ -164,10 +169,15 @@ export interface RecoveryState {
     negotiationLanguageConfidence: number;
     negotiationCodeMixed: boolean;
     negotiationFallbackMode: string;
+    negotiationLanguageSource: string;
     customerRecoveryStatus: string | null;
     customerNextCallDate: number | null;
     customerRecoveryNotes: string | null;
     customerPreferredVoiceLanguage: string;
+    customerVoiceLanguageLocked: boolean;
+    customerLastDetectedVoiceLanguage: string | null;
+    customerLastVoiceLanguageConfidence: number;
+    customerVoiceLanguageSource: string;
 }
 
 export const whatsappApi = {

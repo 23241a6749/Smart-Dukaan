@@ -1,9 +1,11 @@
 import express from 'express';
 import { Customer } from '../models/Customer.js';
 import { CustomerAccount } from '../models/CustomerAccount.js';
+import { User } from '../models/User.js';
 import { auth } from '../middleware/auth.js';
 import { recalculateGlobalKhataScore } from '../utils/khataScore.js';
 import { sendGenericMessage } from '../services/communicationService.js';
+import { normalizeLanguage } from '../services/voiceLanguage.js';
 
 const router = express.Router();
 
@@ -118,13 +120,42 @@ router.get('/:phoneNumber', auth, async (req, res) => {
 // Create/Update customer and ensure account exists for this shop
 router.post('/', auth, async (req, res) => {
     try {
-        const { phoneNumber, name } = req.body;
+        const { phoneNumber, name, preferredVoiceLanguage, lockVoiceLanguage } = req.body;
         const normalizedPhone = phoneNumber.startsWith('+91') ? phoneNumber : '+91' + phoneNumber.replace(/\D/g, '').slice(-10);
+        const shopkeeper = await User.findById(req.auth?.userId).select('defaultVoiceLanguage');
+        const shopDefaultLang = normalizeLanguage((shopkeeper as any)?.defaultVoiceLanguage || 'en');
+        const requestedLang = preferredVoiceLanguage ? normalizeLanguage(preferredVoiceLanguage) : null;
 
         let customer = (await Customer.findOne({ phoneNumber: normalizedPhone })) as any;
         if (!customer) {
-            customer = new Customer({ ...req.body, phoneNumber: normalizedPhone });
+            customer = new Customer({
+                ...req.body,
+                phoneNumber: normalizedPhone,
+                preferredVoiceLanguage: requestedLang || shopDefaultLang,
+                voiceLanguageSource: requestedLang ? 'manual' : 'shop_default',
+                lockVoiceLanguage: Boolean(lockVoiceLanguage),
+                voiceLanguageUpdatedAt: new Date(),
+            });
             await customer.save();
+        } else {
+            const updates: Record<string, unknown> = {};
+            if (name && !customer.name) updates.name = name;
+            if (requestedLang) {
+                updates.preferredVoiceLanguage = requestedLang;
+                updates.voiceLanguageSource = 'manual';
+                updates.voiceLanguageUpdatedAt = new Date();
+            } else if (!customer.preferredVoiceLanguage) {
+                updates.preferredVoiceLanguage = shopDefaultLang;
+                updates.voiceLanguageSource = 'shop_default';
+                updates.voiceLanguageUpdatedAt = new Date();
+            }
+            if (typeof lockVoiceLanguage === 'boolean') {
+                updates.lockVoiceLanguage = lockVoiceLanguage;
+            }
+            if (Object.keys(updates).length) {
+                Object.assign(customer, updates);
+                await customer.save();
+            }
         }
 
         // Ensure account exists for this shop
@@ -157,11 +188,26 @@ router.post('/', auth, async (req, res) => {
 });
 
 // Update customer by ID
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', auth, async (req, res) => {
     try {
+        const payload = { ...req.body };
+        if (payload.preferredVoiceLanguage !== undefined) {
+            payload.preferredVoiceLanguage = normalizeLanguage(String(payload.preferredVoiceLanguage));
+            payload.voiceLanguageSource = 'manual';
+            payload.voiceLanguageUpdatedAt = new Date();
+        }
         const customer = await Customer.findByIdAndUpdate(
             req.params.id,
-            { $set: { ...req.body, phoneNumber: req.body.phoneNumber ? (req.body.phoneNumber.startsWith('+91') ? req.body.phoneNumber : '+91' + req.body.phoneNumber.replace(/\D/g, '').slice(-10)) : undefined } },
+            {
+                $set: {
+                    ...payload,
+                    phoneNumber: req.body.phoneNumber
+                        ? (req.body.phoneNumber.startsWith('+91')
+                            ? req.body.phoneNumber
+                            : '+91' + req.body.phoneNumber.replace(/\D/g, '').slice(-10))
+                        : undefined
+                }
+            },
             { new: true }
         );
         if (!customer) return res.status(404).json({ message: 'Customer not found' });

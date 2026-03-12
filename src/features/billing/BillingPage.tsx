@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { useCart } from '../../contexts/CartContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useToast } from '../../contexts/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
 import { productApi, customerApi, billApi } from '../../services/api';
 import type { Customer } from '../../services/api';
@@ -20,6 +21,7 @@ export const BillingPage: React.FC = () => {
     const { cart, addToCart, increaseQuantity, decreaseQuantity, updateQuantity, removeFromCart, clearCart, cartTotal } = useCart();
     const { t } = useLanguage();
     const { addToast } = useToast();
+    const { user } = useAuth();
 
     useSpeechRecognition({
         onResult: (transcript: string) => {
@@ -47,7 +49,12 @@ export const BillingPage: React.FC = () => {
     const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
     const [selectedCustomer, setSelectedCustomer] = useState<(Customer & LocalCustomer) | null>(null);
     const [isNewCustomer, setIsNewCustomer] = useState(false);
+    const [preferredVoiceLanguage, setPreferredVoiceLanguage] = useState('en');
+    const [lockVoiceLanguage, setLockVoiceLanguage] = useState(false);
     const [khataInfo, setKhataInfo] = useState<KhataExplanation | null>(null);
+    const [activeVoiceLanguage, setActiveVoiceLanguage] = useState('en');
+    const [activeVoiceLock, setActiveVoiceLock] = useState(false);
+    const [voiceSaving, setVoiceSaving] = useState(false);
 
     // Global Search State
     const [globalResults, setGlobalResults] = useState<Customer[]>([]);
@@ -135,7 +142,12 @@ export const BillingPage: React.FC = () => {
         const normalizedPhone = `+91${last10}`;
 
         try {
-            const response = await customerApi.create({ phoneNumber: normalizedPhone, name });
+            const response = await customerApi.create({
+                phoneNumber: normalizedPhone,
+                name,
+                preferredVoiceLanguage: cust ? (cust.preferredVoiceLanguage || preferredVoiceLanguage) : preferredVoiceLanguage,
+                lockVoiceLanguage,
+            });
             const customerData = response.data;
 
             // Sync with local Dexie DB for Khata Scoring
@@ -189,6 +201,38 @@ export const BillingPage: React.FC = () => {
         (c.name?.toLowerCase().includes(customerInput.toLowerCase()) ||
             c.phoneNumber.includes(customerInput)) && customerInput.length > 0
     );
+
+    useEffect(() => {
+        setPreferredVoiceLanguage(user?.defaultVoiceLanguage || 'en');
+    }, [user?.defaultVoiceLanguage]);
+
+    useEffect(() => {
+        if (!selectedCustomer) return;
+        setActiveVoiceLanguage(selectedCustomer.preferredVoiceLanguage || user?.defaultVoiceLanguage || 'en');
+        setActiveVoiceLock(Boolean(selectedCustomer.lockVoiceLanguage));
+    }, [selectedCustomer, user?.defaultVoiceLanguage]);
+
+    const saveVoicePreference = async () => {
+        if (!selectedCustomer?._id) return;
+        setVoiceSaving(true);
+        try {
+            await customerApi.update(selectedCustomer._id, {
+                preferredVoiceLanguage: activeVoiceLanguage,
+                lockVoiceLanguage: activeVoiceLock,
+            });
+            setSelectedCustomer((prev) => prev ? {
+                ...prev,
+                preferredVoiceLanguage: activeVoiceLanguage,
+                lockVoiceLanguage: activeVoiceLock,
+            } : prev);
+            addToast('Voice language preference updated', 'success');
+        } catch (error) {
+            console.error('Failed to update voice preference', error);
+            addToast('Failed to update voice language', 'error');
+        } finally {
+            setVoiceSaving(false);
+        }
+    };
 
     const processTransaction = async (method: 'cash' | 'online' | 'ledger') => {
         if (!selectedCustomer) return false;
@@ -888,6 +932,8 @@ export const BillingPage: React.FC = () => {
                                                 setIsNewCustomer(true);
                                                 if (/^\d{10}$/.test(customerInput)) setPhoneNumber(customerInput);
                                                 else setCustomerName(customerInput);
+                                                setPreferredVoiceLanguage(user?.defaultVoiceLanguage || 'en');
+                                                setLockVoiceLanguage(false);
                                             }}
                                             className="w-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-4 rounded-2xl font-black text-lg flex items-center justify-center gap-2 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                                         >
@@ -924,6 +970,32 @@ export const BillingPage: React.FC = () => {
                                                 className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 py-4 px-6 rounded-2xl text-xl font-bold text-gray-900 dark:text-white outline-none focus:border-primary-green transition-all"
                                             />
                                         </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-xs font-black text-gray-400 uppercase ml-2 mb-1 block">Preferred Call Language</label>
+                                                <select
+                                                    value={preferredVoiceLanguage}
+                                                    onChange={(e) => setPreferredVoiceLanguage(e.target.value)}
+                                                    className="w-full bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 py-4 px-6 rounded-2xl text-base font-bold text-gray-900 dark:text-white outline-none focus:border-primary-green transition-all"
+                                                >
+                                                    <option value="en">English</option>
+                                                    <option value="hi">Hindi</option>
+                                                    <option value="te">Telugu</option>
+                                                    <option value="ta">Tamil</option>
+                                                    <option value="mr">Marathi</option>
+                                                    <option value="bn">Bengali</option>
+                                                    <option value="ur">Urdu</option>
+                                                </select>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setLockVoiceLanguage((prev) => !prev)}
+                                                className="self-end h-[58px] w-full rounded-2xl border-2 border-gray-100 dark:border-gray-700 px-5 text-left"
+                                            >
+                                                <div className="text-xs uppercase font-black text-gray-400">Lock language</div>
+                                                <div className="text-sm font-bold text-gray-800 dark:text-gray-100">{lockVoiceLanguage ? 'Enabled' : 'Disabled'}</div>
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div className="flex gap-3 pt-4">
@@ -945,15 +1017,45 @@ export const BillingPage: React.FC = () => {
                     {checkoutStep === 'PAYMENT' && (
                         <div className="flex-1 p-4 overflow-y-auto">
                             <div className="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 mb-6 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <User size={24} className="text-gray-600" />
-                                    <div>
-                                        <div className="font-bold text-gray-900 dark:text-white">{selectedCustomer?.name}</div>
-                                        <div className="text-gray-500 font-medium flex items-center gap-1">
-                                            <Phone size={14} /> {selectedCustomer?.phoneNumber}
+                                    <div className="flex items-center gap-3">
+                                        <User size={24} className="text-gray-600" />
+                                        <div>
+                                            <div className="font-bold text-gray-900 dark:text-white">{selectedCustomer?.name}</div>
+                                            <div className="text-gray-500 font-medium flex items-center gap-1">
+                                                <Phone size={14} /> {selectedCustomer?.phoneNumber}
+                                            </div>
+                                            <div className="mt-2 flex items-center gap-2">
+                                                <select
+                                                    value={activeVoiceLanguage}
+                                                    onChange={(e) => setActiveVoiceLanguage(e.target.value)}
+                                                    className="text-xs font-bold px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white dark:bg-gray-900"
+                                                >
+                                                    <option value="en">EN</option>
+                                                    <option value="hi">HI</option>
+                                                    <option value="te">TE</option>
+                                                    <option value="ta">TA</option>
+                                                    <option value="mr">MR</option>
+                                                    <option value="bn">BN</option>
+                                                    <option value="ur">UR</option>
+                                                </select>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setActiveVoiceLock((prev) => !prev)}
+                                                    className={`text-[11px] font-black px-2.5 py-1.5 rounded-lg ${activeVoiceLock ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}
+                                                >
+                                                    {activeVoiceLock ? 'Language Locked' : 'Auto Update'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={saveVoicePreference}
+                                                    disabled={voiceSaving}
+                                                    className="text-[11px] font-black px-2.5 py-1.5 rounded-lg bg-primary-green text-white disabled:opacity-60"
+                                                >
+                                                    {voiceSaving ? 'Saving...' : 'Save'}
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
                                 <div className={`px-4 py-2 rounded-xl border-2 text-center ${getLedgerColor(selectedCustomer?.khataBalance || 0)}`}>
                                     <div className="text-xs uppercase font-bold">Dues</div>
                                     <div className="text-lg font-black font-mono">₹{selectedCustomer?.khataBalance || 0}</div>

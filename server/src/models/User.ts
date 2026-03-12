@@ -20,7 +20,16 @@ const userSchema = new mongoose.Schema({
             default: undefined
         }
     },
-    address: { type: String } // Optional: store formatted address
+    address: { type: String }, // Optional: store formatted address
+    defaultVoiceLanguage: { type: String, default: 'en' },
+    fallbackVoiceLanguage: { type: String, default: 'en' },
+    voiceLanguagePolicy: {
+        type: String,
+        enum: ['manual', 'hybrid', 'auto'],
+        default: 'hybrid'
+    },
+    enableVoiceLanguageMenu: { type: Boolean, default: true },
+    supportedVoiceLanguages: { type: [String], default: ['en', 'hi', 'te'] }
 }, { timestamps: true });
 
 // Add geospatial index for efficient location queries

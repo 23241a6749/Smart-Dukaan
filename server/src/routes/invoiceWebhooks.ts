@@ -5,6 +5,7 @@ import { classifyIntent, classifyIntentAndPromise, Intent } from '../services/in
 import { sendGenericMessage } from '../services/communicationService.js';
 import { appendToHistory, getHistory, clearHistory } from '../services/conversationMemory.js';
 import { Customer } from '../models/Customer.js';
+import { User } from '../models/User.js';
 import { VoiceCallSession } from '../models/VoiceCallSession.js';
 import OpenAI from 'openai';
 import { transcribeAudioWithDeepgram } from '../services/deepgram.js';
@@ -139,21 +140,64 @@ async function syncCustomerRecoveryByPhone(phone: string, update: { nextCallDate
 async function syncCustomerVoiceLanguageByPhone(phone: string, lang: VoiceLang, confidence: number) {
     const last10 = phone.replace(/[^0-9]/g, '').slice(-10);
     if (last10.length < 10) return;
-    await Customer.findOneAndUpdate(
-        { phoneNumber: { $regex: new RegExp(`${last10}$`) } },
-        {
-            $set: {
-                preferredVoiceLanguage: lang,
-                voiceLanguageUpdatedAt: new Date(),
+    const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } });
+    if (!customer) return;
+
+    customer.lastDetectedVoiceLanguage = lang;
+    customer.lastVoiceLanguageConfidence = confidence;
+    customer.voiceLanguageUpdatedAt = new Date();
+
+    if (!customer.lockVoiceLanguage && confidence >= 0.75) {
+        customer.preferredVoiceLanguage = lang;
+        customer.voiceLanguageSource = 'detected';
+        customer.preferredLanguage = lang;
+    }
+    await customer.save();
+}
+
+async function resolveVoiceLanguageContextByPhone(phone: string): Promise<{
+    lang: VoiceLang;
+    source: 'customer' | 'shop_default' | 'fallback';
+    lock: boolean;
+}> {
+    const last10 = String(phone || '').replace(/[^0-9]/g, '').slice(-10);
+    if (last10.length < 10) {
+        return { lang: 'en', source: 'fallback', lock: false };
+    }
+
+    const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } })
+        .select('_id preferredVoiceLanguage preferredLanguage lockVoiceLanguage')
+        .lean() as any;
+
+    if (customer?.preferredVoiceLanguage) {
+        return {
+            lang: normalizeLanguage(customer.preferredVoiceLanguage),
+            source: 'customer',
+            lock: Boolean(customer.lockVoiceLanguage),
+        };
+    }
+
+    if (customer?._id) {
+        const account = await CustomerAccount.findOne({ customerId: customer._id })
+            .sort({ updatedAt: -1, balance: -1 })
+            .select('shopkeeperId')
+            .lean() as any;
+
+        if (account?.shopkeeperId) {
+            const shopkeeper = await User.findById(account.shopkeeperId)
+                .select('defaultVoiceLanguage')
+                .lean() as any;
+            if (shopkeeper?.defaultVoiceLanguage) {
+                return {
+                    lang: normalizeLanguage(shopkeeper.defaultVoiceLanguage),
+                    source: 'shop_default',
+                    lock: false,
+                };
             }
         }
-    );
-    if (confidence >= 0.75) {
-        await Customer.findOneAndUpdate(
-            { phoneNumber: { $regex: new RegExp(`${last10}$`) } },
-            { $set: { preferredLanguage: lang } }
-        );
     }
+
+    return { lang: normalizeLanguage(customer?.preferredLanguage || 'en'), source: 'fallback', lock: Boolean(customer?.lockVoiceLanguage) };
 }
 
 function pickCustomerPhoneFromCall(from: string, to: string): string {
@@ -356,7 +400,8 @@ async function applyVoiceIntentOutcome(args: {
             recoveryStatus: 'Promised',
             recoveryNotes: `Promise captured by voice agent (${promiseDate.toDateString()}).`
         });
-        await sendWhatsAppFollowUp(invoice, promiseDate, 'en');
+        const langCtx = await resolveVoiceLanguageContextByPhone(invoice.client_phone);
+        await sendWhatsAppFollowUp(invoice, promiseDate, langCtx.lang);
         await invoice.save();
         return 'Thank you. We have noted your promise. We will send a reminder on your promised date. Goodbye.';
     }
@@ -418,11 +463,8 @@ async function getOrCreateVoiceSession(callSid: string, invoice: any): Promise<a
     const existing = await VoiceCallSession.findOne({ callSid });
     if (existing) return existing;
 
-    const last10 = String(invoice.client_phone || '').replace(/[^0-9]/g, '').slice(-10);
-    const customer = last10.length === 10
-        ? await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } })
-        : null;
-    const initialLang = normalizeLanguage(customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en');
+    const languageContext = await resolveVoiceLanguageContextByPhone(invoice.client_phone);
+    const initialLang = languageContext.lang;
 
     const session = new VoiceCallSession({
         callSid,
@@ -435,9 +477,14 @@ async function getOrCreateVoiceSession(callSid: string, invoice: any): Promise<a
         partialAmountNow: 0,
         remainingAmount: Math.max(0, Math.round(invoice.amount || 0)),
         detectedLanguage: initialLang,
-        languageConfidence: customer ? 0.7 : 0,
+        languageConfidence: languageContext.source === 'customer' ? 0.85 : languageContext.source === 'shop_default' ? 0.7 : 0.4,
         isCodeMixed: false,
         fallbackMode: 'none',
+        selectedLanguageSource: languageContext.source === 'customer'
+            ? 'customer'
+            : languageContext.source === 'shop_default'
+                ? 'shop_default'
+                : 'fallback',
     });
     await session.save();
     return session;
@@ -734,9 +781,15 @@ invoiceWebhooksRouter.post('/voice-recording', async (req: Request, res: Respons
         }
 
         const detected = await detectLanguageFromTranscript(transcript);
-        const shouldSwitchLang = detected.confidence >= 0.6 || session.languageConfidence < 0.55;
+        const languageCtx = await resolveVoiceLanguageContextByPhone(invoice.client_phone);
+        const canSwitch = !languageCtx.lock && (session.languageSwitchCount || 0) < 1;
+        const shouldSwitchLang = canSwitch && (detected.confidence >= 0.75 || session.languageConfidence < 0.55);
         if (shouldSwitchLang) {
             const normalized = normalizeLanguage(detected.lang);
+            if (normalized !== activeLang) {
+                session.languageSwitchCount = (session.languageSwitchCount || 0) + 1;
+                session.selectedLanguageSource = 'detected';
+            }
             session.detectedLanguage = normalized;
             session.languageConfidence = detected.confidence;
             session.isCodeMixed = detected.isCodeMixed;
@@ -1026,8 +1079,8 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
             return res.send(buildHangupTwiml(getVoicePrompt('en', 'noInvoice'), 'en'));
         }
 
-        const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } });
-        let activeLang = normalizeLanguage(customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en');
+        const languageContext = await resolveVoiceLanguageContextByPhone(invoice.client_phone);
+        let activeLang = languageContext.lang;
 
         if (dtmfDigits) {
             if (dtmfDigits === '1') {

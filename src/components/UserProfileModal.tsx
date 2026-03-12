@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Camera, LogOut, Check, Moon, Sun } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -18,6 +18,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
 
     const [name, setName] = useState(user?.name || '');
     const [avatarUrl] = useState(user?.avatar || '');
+    const [defaultVoiceLanguage, setDefaultVoiceLanguage] = useState(user?.defaultVoiceLanguage || 'en');
+    const [fallbackVoiceLanguage, setFallbackVoiceLanguage] = useState(user?.fallbackVoiceLanguage || 'en');
+    const [voiceLanguagePolicy, setVoiceLanguagePolicy] = useState<'manual' | 'hybrid' | 'auto'>((user?.voiceLanguagePolicy as any) || 'hybrid');
+    const [enableVoiceLanguageMenu, setEnableVoiceLanguageMenu] = useState(Boolean(user?.enableVoiceLanguageMenu ?? true));
     const [loading, setLoading] = useState(false);
 
     const [showLocalLogoutConfirm, setShowLocalLogoutConfirm] = useState(false);
@@ -25,13 +29,29 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
     const [password, setPassword] = useState('');
 
+    useEffect(() => {
+        setName(user?.name || '');
+        setDefaultVoiceLanguage(user?.defaultVoiceLanguage || 'en');
+        setFallbackVoiceLanguage(user?.fallbackVoiceLanguage || 'en');
+        setVoiceLanguagePolicy((user?.voiceLanguagePolicy as any) || 'hybrid');
+        setEnableVoiceLanguageMenu(Boolean(user?.enableVoiceLanguageMenu ?? true));
+    }, [user?.name, user?.defaultVoiceLanguage, user?.fallbackVoiceLanguage, user?.voiceLanguagePolicy, user?.enableVoiceLanguageMenu]);
+
     const handleUpdateProfile = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         try {
             const res = await axios.patch(
                 `${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5001/api'}/auth/profile`,
-                { name, avatar: avatarUrl },
+                {
+                    name,
+                    avatar: avatarUrl,
+                    defaultVoiceLanguage,
+                    fallbackVoiceLanguage,
+                    voiceLanguagePolicy,
+                    enableVoiceLanguageMenu,
+                    supportedVoiceLanguages: ['en', 'hi', 'te'],
+                },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             if (res.data) {
@@ -134,6 +154,62 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                                     {loading ? translate('SAVING...') : translate('SAVE CHANGES')}
                                 </button>
                             </form>
+
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-primary-green ml-1">Legacy Agent Language</label>
+                                <div className="grid grid-cols-1 gap-2">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Default Language</label>
+                                        <select
+                                            value={defaultVoiceLanguage}
+                                            onChange={(e) => setDefaultVoiceLanguage(e.target.value)}
+                                            className="w-full px-4 py-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none text-sm font-bold"
+                                        >
+                                            <option value="en">English</option>
+                                            <option value="hi">Hindi</option>
+                                            <option value="te">Telugu</option>
+                                            <option value="ta">Tamil</option>
+                                            <option value="mr">Marathi</option>
+                                            <option value="bn">Bengali</option>
+                                            <option value="ur">Urdu</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Fallback Language</label>
+                                        <select
+                                            value={fallbackVoiceLanguage}
+                                            onChange={(e) => setFallbackVoiceLanguage(e.target.value)}
+                                            className="w-full px-4 py-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none text-sm font-bold"
+                                        >
+                                            <option value="en">English</option>
+                                            <option value="hi">Hindi</option>
+                                            <option value="te">Telugu</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Language Policy</label>
+                                        <select
+                                            value={voiceLanguagePolicy}
+                                            onChange={(e) => setVoiceLanguagePolicy(e.target.value as 'manual' | 'hybrid' | 'auto')}
+                                            className="w-full px-4 py-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 outline-none text-sm font-bold"
+                                        >
+                                            <option value="manual">Manual</option>
+                                            <option value="hybrid">Hybrid</option>
+                                            <option value="auto">Auto Detect</option>
+                                        </select>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEnableVoiceLanguageMenu((prev) => !prev)}
+                                        className="w-full flex items-center justify-between px-4 py-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
+                                    >
+                                        <span className="text-sm font-bold">Enable first-call language menu</span>
+                                        <span className={`text-xs font-black px-2 py-1 rounded-full ${enableVoiceLanguageMenu ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                                            {enableVoiceLanguageMenu ? 'ON' : 'OFF'}
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
 
                             <div className="space-y-3">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-primary-green ml-1">{translate('Interface Mode')}</label>

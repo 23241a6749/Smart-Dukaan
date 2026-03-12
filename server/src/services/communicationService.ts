@@ -2,6 +2,8 @@ import twilio from 'twilio';
 import nodemailer from 'nodemailer';
 import { IInvoice } from '../models/Invoice.js';
 import { Customer } from '../models/Customer.js';
+import { CustomerAccount } from '../models/CustomerAccount.js';
+import { User } from '../models/User.js';
 import { normalizeLanguage, type VoiceLang } from './voiceLanguage.js';
 import { getVoicePrompt } from './voicePrompts.js';
 import { buildRecordFollowupTwimlLocalized } from './voiceTwiML.js';
@@ -91,12 +93,19 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
                 console.error('[Voice Agent] BACKEND_URL is missing or invalid. It must be public http(s).');
                 return 'failed_config';
             }
-            const customerLang = await resolveCustomerVoiceLanguage(invoice.client_phone);
-            const prompt = `${safeMessage}. ${getVoicePrompt(customerLang, 'opening')}`;
+            const voiceCtx = await resolveCustomerVoiceContext(invoice.client_phone);
+            const menuHint = voiceCtx.enableMenu
+                ? (voiceCtx.lang === 'te'
+                    ? ' భాష: Telugu, Hindi, or English చెబుతారు.'
+                    : voiceCtx.lang === 'hi'
+                    ? ' भाषा: Hindi, English, या Telugu बोलिए.'
+                    : ' Language: say Hindi, English, or Telugu.')
+                : '';
+            const prompt = `${safeMessage}. ${getVoicePrompt(voiceCtx.lang, 'opening')}${menuHint}`;
             const twiml = buildRecordFollowupTwimlLocalized({
                 text: prompt,
                 backendUrl,
-                lang: customerLang,
+                lang: voiceCtx.lang,
             });
 
             await twilioClient.calls.create({
@@ -144,11 +153,36 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
     }
 }
 
-async function resolveCustomerVoiceLanguage(phone: string): Promise<VoiceLang> {
+async function resolveCustomerVoiceContext(phone: string): Promise<{ lang: VoiceLang; enableMenu: boolean }> {
     const last10 = String(phone || '').replace(/[^0-9]/g, '').slice(-10);
-    if (last10.length < 10) return 'en';
-    const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } }).select('preferredVoiceLanguage preferredLanguage').lean();
-    return normalizeLanguage((customer as any)?.preferredVoiceLanguage || (customer as any)?.preferredLanguage || 'en');
+    if (last10.length < 10) return { lang: 'en', enableMenu: true };
+
+    const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } })
+        .select('_id preferredVoiceLanguage preferredLanguage lockVoiceLanguage')
+        .lean() as any;
+
+    if (!customer) return { lang: 'en', enableMenu: true };
+
+    const preferred = normalizeLanguage(customer.preferredVoiceLanguage || customer.preferredLanguage || '');
+    if (preferred && preferred !== 'en') {
+        return { lang: preferred, enableMenu: false };
+    }
+
+    const account = await CustomerAccount.findOne({ customerId: customer._id })
+        .sort({ updatedAt: -1, balance: -1 })
+        .select('shopkeeperId')
+        .lean() as any;
+
+    const shopkeeper = account?.shopkeeperId
+        ? await User.findById(account.shopkeeperId)
+            .select('defaultVoiceLanguage enableVoiceLanguageMenu')
+            .lean() as any
+        : null;
+
+    return {
+        lang: normalizeLanguage(shopkeeper?.defaultVoiceLanguage || preferred || 'en'),
+        enableMenu: Boolean(shopkeeper?.enableVoiceLanguageMenu ?? true),
+    };
 }
 
 export async function sendGenericMessage(phone: string, message: string, channel: string): Promise<string> {
