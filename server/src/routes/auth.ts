@@ -6,6 +6,7 @@ import { User } from '../models/User.js';
 import { Product } from '../models/Product.js';
 import { GlobalProduct } from '../models/GlobalProduct.js';
 import { starterProducts } from '../utils/starterProducts.js';
+import { normalizeLanguage } from '../services/voiceLanguage.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'hackathon_secret_123';
@@ -123,11 +124,43 @@ router.patch('/profile', async (req, res) => {
         if (!token) return res.status(401).json({ message: 'No token' });
 
         const decoded: any = jwt.verify(token, JWT_SECRET);
-        const { name, avatar } = req.body;
+        const {
+            name,
+            avatar,
+            defaultVoiceLanguage,
+            fallbackVoiceLanguage,
+            voiceLanguagePolicy,
+            enableVoiceLanguageMenu,
+            supportedVoiceLanguages,
+        } = req.body;
+
+        const patch: Record<string, unknown> = {};
+        if (typeof name === 'string') patch.name = name;
+        if (typeof avatar === 'string' || avatar === null) patch.avatar = avatar;
+
+        if (defaultVoiceLanguage !== undefined) {
+            patch.defaultVoiceLanguage = normalizeLanguage(String(defaultVoiceLanguage));
+        }
+        if (fallbackVoiceLanguage !== undefined) {
+            patch.fallbackVoiceLanguage = normalizeLanguage(String(fallbackVoiceLanguage));
+        }
+        if (voiceLanguagePolicy !== undefined && ['manual', 'hybrid', 'auto'].includes(String(voiceLanguagePolicy))) {
+            patch.voiceLanguagePolicy = voiceLanguagePolicy;
+        }
+        if (typeof enableVoiceLanguageMenu === 'boolean') {
+            patch.enableVoiceLanguageMenu = enableVoiceLanguageMenu;
+        }
+        if (Array.isArray(supportedVoiceLanguages)) {
+            const allowed = ['en', 'hi', 'te', 'ta', 'mr', 'bn', 'ur'];
+            const normalized = supportedVoiceLanguages
+                .map((lang) => normalizeLanguage(String(lang)))
+                .filter((lang) => allowed.includes(lang));
+            patch.supportedVoiceLanguages = Array.from(new Set(normalized.length ? normalized : ['en', 'hi', 'te']));
+        }
 
         const updatedUser = await User.findByIdAndUpdate(
             decoded.userId,
-            { $set: { name, avatar } },
+            { $set: patch },
             { new: true }
         ).select('-password');
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Phone, ShieldCheck, Zap, ArrowRight, Clock3 } from 'lucide-react';
 import DefaulterCard from '../../components/recovery/DefaulterCard';
 import LiveCallModal, { type RecoveryCustomer } from '../../components/recovery/LiveCallModal';

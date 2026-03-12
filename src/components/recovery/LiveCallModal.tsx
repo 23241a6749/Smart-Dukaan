@@ -38,7 +38,15 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
 
     useEffect(() => {
         if (isOpen && customer) {
+            // Reset all state when opening for a new call
+            setStatus('connecting');
+            setTranscript([]);
+            setInsight('Initializing recovery agent...');
             setCallDuration(0);
+            setActiveInvoiceId('');
+            setSessionStartedAtIso('');
+            hasTriggeredCallRef.current = false;
+            
             timerRef.current = window.setInterval(() => {
                 setCallDuration(prev => prev + 1);
             }, 1000);
@@ -157,6 +165,7 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
                 const response = await invoiceApi.getRecoveryState(activeInvoiceId, sessionStartedAtIso || undefined);
                 const state = response.data;
 
+                // Update insight with negotiation details
                 if (state.negotiationStage) {
                     const partialText = state.negotiationPartialAmountNow
                         ? ` | Partial now: ₹${state.negotiationPartialAmountNow}`
@@ -164,14 +173,36 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
                     const remainingText = typeof state.negotiationRemainingAmount === 'number'
                         ? ` | Remaining: ₹${state.negotiationRemainingAmount}`
                         : '';
-                    setInsight(`Stage: ${state.negotiationStage} | Turns: ${state.negotiationTurns || 0}${partialText}${remainingText}`);
+                    const langText = state.negotiationLanguage 
+                        ? ` | Lang: ${state.negotiationLanguage.toUpperCase()}`
+                        : '';
+                    setInsight(`Stage: ${state.negotiationStage} | Turns: ${state.negotiationTurns || 0}${partialText}${remainingText}${langText}`);
                 }
 
+                // Add AI prompt (what the system said)
+                if (state.latestVoiceLog && !state.latestVoiceLog.includes('We could not hear')) {
+                    setTranscript((prev) => {
+                        const exists = prev.some((entry) => entry.text === state.latestVoiceLog);
+                        if (exists) return prev;
+                        return [...prev, { role: 'assistant', text: state.latestVoiceLog || '' }];
+                    });
+                }
+
+                // Add customer transcript
                 if (state.latestTranscriptLog) {
                     setTranscript((prev) => {
                         const exists = prev.some((entry) => entry.text === state.latestTranscriptLog);
                         if (exists) return prev;
-                        return [...prev, { role: 'user', text: state.latestTranscriptLog }];
+                        return [...prev, { role: 'user', text: state.latestTranscriptLog || '' }];
+                    });
+                }
+
+                // Also add session customer transcript if available
+                if (state.latestSessionCustomerTranscript) {
+                    setTranscript((prev) => {
+                        const exists = prev.some((entry) => entry.text === state.latestSessionCustomerTranscript);
+                        if (exists) return prev;
+                        return [...prev, { role: 'user', text: state.latestSessionCustomerTranscript || '' }];
                     });
                 }
 

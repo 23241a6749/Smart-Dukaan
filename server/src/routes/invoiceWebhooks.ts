@@ -5,44 +5,87 @@ import { classifyIntent, classifyIntentAndPromise, Intent } from '../services/in
 import { sendGenericMessage } from '../services/communicationService.js';
 import { appendToHistory, getHistory, clearHistory } from '../services/conversationMemory.js';
 import { Customer } from '../models/Customer.js';
+import { User } from '../models/User.js';
 import { VoiceCallSession } from '../models/VoiceCallSession.js';
 import OpenAI from 'openai';
 import { transcribeAudioWithDeepgram } from '../services/deepgram.js';
+import { normalizeLanguage, type VoiceLang } from '../services/voiceLanguage.js';
+import { getVoicePrompt, formatDateForVoice } from '../services/voicePrompts.js';
+import {
+    buildErrorTwimlLocalized,
+    buildGatherTwimlLocalized,
+    buildHangupTwimlLocalized,
+    buildRecordFollowupTwimlLocalized,
+} from '../services/voiceTwiML.js';
 
 export const invoiceWebhooksRouter = Router();
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 
-// Sanitize ANY text for safe inclusion inside TwiML <Say> tags
-function sanitizeForTwiml(text: string): string {
-    return (text || '')
-        .replace(/&/g, ' and ')
-        .replace(/</g, '')
-        .replace(/>/g, '')
-        .replace(/₹/g, 'rupees ')
-        .replace(/"/g, '')
-        .replace(/'/g, '')
-        .replace(/\n/g, '. ')
-        .replace(/\r/g, '')
-        .trim() || 'Thank you. Goodbye.';
+async function resolveVoiceLanguageContextByPhone(phone: string): Promise<{
+    lang: VoiceLang;
+    source: 'customer' | 'shop_default' | 'fallback';
+    lock: boolean;
+}> {
+    const last10 = String(phone || '').replace(/[^0-9]/g, '').slice(-10);
+    if (last10.length < 10) {
+        return { lang: 'en', source: 'fallback', lock: false };
+    }
+
+    const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } })
+        .select('_id preferredVoiceLanguage preferredLanguage lockVoiceLanguage')
+        .lean() as any;
+
+    if (customer?.preferredVoiceLanguage) {
+        return {
+            lang: normalizeLanguage(customer.preferredVoiceLanguage),
+            source: 'customer',
+            lock: Boolean(customer.lockVoiceLanguage),
+        };
+    }
+
+    if (customer?._id) {
+        const account = await CustomerAccount.findOne({ customerId: customer._id })
+            .sort({ updatedAt: -1, balance: -1 })
+            .select('shopkeeperId')
+            .lean() as any;
+
+        if (account?.shopkeeperId) {
+            const shopkeeper = await User.findById(account.shopkeeperId)
+                .select('defaultVoiceLanguage')
+                .lean() as any;
+            if (shopkeeper?.defaultVoiceLanguage) {
+                return {
+                    lang: normalizeLanguage(shopkeeper.defaultVoiceLanguage),
+                    source: 'shop_default',
+                    lock: false,
+                };
+            }
+        }
+    }
+
+    return { lang: normalizeLanguage(customer?.preferredLanguage || 'en'), source: 'fallback', lock: Boolean(customer?.lockVoiceLanguage) };
 }
 
-// Build valid <Gather> TwiML for multi-turn voice conversation
-function buildGatherTwiml(text: string, backendUrl: string, callCount: number = 0): string {
-    const safe = sanitizeForTwiml(text);
-    const nextCount = callCount + 1;
-    return `<?xml version="1.0" encoding="UTF-8"?><Response><Gather input="speech" action="${backendUrl}/api/invoices/webhook/voice?CallCount=${nextCount}" method="POST" timeout="5" speechTimeout="auto" language="en-IN" enhanced="true" speechModel="phone_call"><Say voice="alice" language="en-IN">${safe}</Say></Gather><Say voice="alice" language="en-IN">I did not hear anything. Goodbye.</Say></Response>`;
+// Build valid <Gather> TwiML for multi-turn voice conversation (localized)
+function buildGatherTwiml(text: string, backendUrl: string, callCount: number = 0, lang: VoiceLang = 'en'): string {
+    return buildGatherTwimlLocalized({
+        text,
+        backendUrl,
+        callCount,
+        lang,
+        withDtmfFallback: false,
+    });
 }
 
-// Build valid hangup TwiML
-function buildHangupTwiml(text: string): string {
-    const safe = sanitizeForTwiml(text);
-    return `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">${safe}</Say><Hangup/></Response>`;
+// Build valid hangup TwiML (localized)
+function buildHangupTwiml(text: string, lang: VoiceLang = 'en'): string {
+    return buildHangupTwimlLocalized(text, lang);
 }
 
-// Build error TwiML — guaranteed to never fail
-function buildErrorTwiml(): string {
-    return `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">Sorry, there was a connection issue. We will call you back. Goodbye.</Say><Hangup/></Response>`;
+// Build error TwiML (localized)
+function buildErrorTwiml(lang: VoiceLang = 'en'): string {
+    return buildErrorTwimlLocalized(lang);
 }
 
 // Post-call WhatsApp follow-up with UPI payment link
@@ -95,9 +138,8 @@ async function sendWhatsAppSettlementFollowUp(args: {
     }
 }
 
-function buildRecordFollowupTwiml(text: string, backendUrl: string): string {
-    const safe = sanitizeForTwiml(text);
-    return `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">${safe}</Say><Record action="${backendUrl}/api/invoices/webhook/voice-recording" method="POST" maxLength="25" playBeep="true" timeout="4" trim="trim-silence" /><Say voice="alice" language="en-IN">We could not hear your response clearly. We will follow up later. Goodbye.</Say><Hangup/></Response>`;
+function buildRecordFollowupTwiml(text: string, backendUrl: string, lang: VoiceLang = 'en'): string {
+    return buildRecordFollowupTwimlLocalized({ text, backendUrl, lang });
 }
 
 function fallbackRetryDate(hours = 4): Date {

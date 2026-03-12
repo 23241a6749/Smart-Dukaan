@@ -1,6 +1,12 @@
 import twilio from 'twilio';
 import nodemailer from 'nodemailer';
 import { IInvoice } from '../models/Invoice.js';
+import { Customer } from '../models/Customer.js';
+import { CustomerAccount } from '../models/CustomerAccount.js';
+import { User } from '../models/User.js';
+import { normalizeLanguage, type VoiceLang } from './voiceLanguage.js';
+import { getVoicePrompt } from './voicePrompts.js';
+import { buildRecordFollowupTwimlLocalized } from './voiceTwiML.js';
 
 // Setup Twilio
 const twilioAvailable = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
@@ -69,26 +75,23 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
                 return 'skipped_non_target';
             }
 
-            // Sanitize for TwiML XML
-            const safeMessage = (message || '')
-                .replace(/&/g, ' and ')
-                .replace(/</g, '')
-                .replace(/>/g, '')
-                .replace(/₹/g, 'rupees ')
-                .replace(/"/g, '')
-                .replace(/'/g, '')
-                .replace(/\n/g, '. ')
-                .replace(/\r/g, '')
-                .trim();
-
-            // Voice agent: prompt + recording, transcript is handled by Deepgram in webhook.
+            // Voice agent: Use ONLY the localized prompt (not the English message)
+            // The voice prompt already contains the complete message in the customer's language
             const backendUrl = process.env.BACKEND_URL || '';
             if (!/^https?:\/\//.test(backendUrl)) {
                 console.error('[Voice Agent] BACKEND_URL is missing or invalid. It must be public http(s).');
                 return 'failed_config';
             }
-            const prompt = `${safeMessage}. Please tell us clearly when you will pay. Speak after the beep.`;
-            const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="alice" language="en-IN">${prompt}</Say><Record action="${backendUrl}/api/invoices/webhook/voice-recording" method="POST" maxLength="25" playBeep="true" timeout="4" trim="trim-silence" /><Say voice="alice" language="en-IN">We could not capture your response. We will call you again later. Goodbye.</Say><Hangup/></Response>`;
+            const voiceCtx = await resolveCustomerVoiceContext(invoice.client_phone);
+            
+            // Generate fully localized opening prompt (no English mixing)
+            const localizedPrompt = getVoicePrompt(voiceCtx.lang, 'opening');
+            
+            const twiml = buildRecordFollowupTwimlLocalized({
+                text: localizedPrompt,
+                backendUrl,
+                lang: voiceCtx.lang,
+            });
 
             await twilioClient.calls.create({
                 twiml: twiml,
@@ -133,6 +136,38 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
         console.error(`Error sending ${channel} notification to ${invoice.client_name}:`, error);
         return 'failed';
     }
+}
+
+async function resolveCustomerVoiceContext(phone: string): Promise<{ lang: VoiceLang; enableMenu: boolean }> {
+    const last10 = String(phone || '').replace(/[^0-9]/g, '').slice(-10);
+    if (last10.length < 10) return { lang: 'en', enableMenu: true };
+
+    const customer = await Customer.findOne({ phoneNumber: { $regex: new RegExp(`${last10}$`) } })
+        .select('_id preferredVoiceLanguage preferredLanguage lockVoiceLanguage')
+        .lean() as any;
+
+    if (!customer) return { lang: 'en', enableMenu: true };
+
+    const preferred = normalizeLanguage(customer.preferredVoiceLanguage || customer.preferredLanguage || '');
+    if (preferred && preferred !== 'en') {
+        return { lang: preferred, enableMenu: false };
+    }
+
+    const account = await CustomerAccount.findOne({ customerId: customer._id })
+        .sort({ updatedAt: -1, balance: -1 })
+        .select('shopkeeperId')
+        .lean() as any;
+
+    const shopkeeper = account?.shopkeeperId
+        ? await User.findById(account.shopkeeperId)
+            .select('defaultVoiceLanguage enableVoiceLanguageMenu')
+            .lean() as any
+        : null;
+
+    return {
+        lang: normalizeLanguage(shopkeeper?.defaultVoiceLanguage || preferred || 'en'),
+        enableMenu: Boolean(shopkeeper?.enableVoiceLanguageMenu ?? true),
+    };
 }
 
 export async function sendGenericMessage(phone: string, message: string, channel: string): Promise<string> {

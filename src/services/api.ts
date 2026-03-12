@@ -24,6 +24,11 @@ export interface Customer {
     khataScore?: number;
     khataLimit?: number;
     isLocal?: boolean;
+    preferredVoiceLanguage?: string;
+    lockVoiceLanguage?: boolean;
+    lastDetectedVoiceLanguage?: string;
+    lastVoiceLanguageConfidence?: number;
+    voiceLanguageSource?: 'manual' | 'shop_default' | 'detected' | 'ivr';
 }
 
 export interface WhatsAppOrderItem {
@@ -136,8 +141,44 @@ export const invoiceApi = {
     importKhataDues: () => api.post('/invoices/import-khata'),
     recoverNow: (customerId: string) => api.post(`/invoices/recover-now/${customerId}`),
     getRecoveryState: (invoiceId: string, since?: string) =>
-        api.get(`/invoices/recovery-state/${invoiceId}`, { params: since ? { since } : undefined }),
+        api.get<RecoveryState>(`/invoices/recovery-state/${invoiceId}`, { params: since ? { since } : undefined }),
 };
+
+export interface RecoveryState {
+    invoiceId: string;
+    invoiceStatus: string;
+    lastIntent: string | null;
+    aiConfidence: number;
+    promisedDate: string | null;
+    nextRetryAt: string | null;
+    hasTranscript: boolean;
+    hasTranscriptSince: boolean;
+    latestVoiceLog: string | null;
+    latestTranscriptLog: string | null;
+    latestVoiceAt: string | null;
+    latestTranscriptAt: string | null;
+    negotiationStage: string | null;
+    negotiationStatus: string | null;
+    negotiationSummary: string | null;
+    negotiationTurns: number;
+    negotiationPartialAmountNow: number;
+    negotiationRemainingAmount: number | null;
+    negotiationPromisedDate: string | null;
+    latestSessionCustomerTranscript: string | null;
+    negotiationLanguage: string;
+    negotiationLanguageConfidence: number;
+    negotiationCodeMixed: boolean;
+    negotiationFallbackMode: string;
+    negotiationLanguageSource: string;
+    customerRecoveryStatus: string | null;
+    customerNextCallDate: number | null;
+    customerRecoveryNotes: string | null;
+    customerPreferredVoiceLanguage: string;
+    customerVoiceLanguageLocked: boolean;
+    customerLastDetectedVoiceLanguage: string | null;
+    customerLastVoiceLanguageConfidence: number;
+    customerVoiceLanguageSource: string;
+}
 
 export const whatsappApi = {
     getAnalytics: () => api.get('/whatsapp/analytics'),

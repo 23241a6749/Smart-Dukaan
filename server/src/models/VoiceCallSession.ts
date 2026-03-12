@@ -32,6 +32,20 @@ const voiceCallSessionSchema = new mongoose.Schema({
     lastRecordingSid: { type: String, default: '' },
     transcriptTurns: { type: [transcriptTurnSchema], default: [] },
     finalSummary: { type: String, default: '' },
+    detectedLanguage: { type: String, default: 'en' },
+    languageConfidence: { type: Number, default: 0 },
+    isCodeMixed: { type: Boolean, default: false },
+    fallbackMode: {
+        type: String,
+        enum: ['none', 'simple_prompt', 'dtmf', 'manual_callback'],
+        default: 'none'
+    },
+    languageSwitchCount: { type: Number, default: 0 },
+    selectedLanguageSource: {
+        type: String,
+        enum: ['customer', 'shop_default', 'location', 'ivr', 'detected', 'fallback'],
+        default: 'fallback'
+    },
 }, { timestamps: true });
 
 export const VoiceCallSession = mongoose.model('VoiceCallSession', voiceCallSessionSchema);

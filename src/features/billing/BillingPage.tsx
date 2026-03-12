@@ -142,7 +142,7 @@ const CustomerSuggestionRow = React.memo(({ cust, t, identifyCustomer, isGlobal 
     </button>
 ));
 
-const PaymentOptionLabel = React.memo(({ value, currentMethod, onChange, t, title, description, disabled, cartTotal, khataInfo }: any) => (
+const PaymentOptionLabel = React.memo(({ value, currentMethod, onChange, t, title, description, disabled, khataInfo }: any) => (
     <label
         className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all relative ${currentMethod === value
             ? 'border-primary-green bg-green-50 dark:bg-green-900/10'
