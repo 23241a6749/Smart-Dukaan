@@ -142,7 +142,7 @@ const CustomerSuggestionRow = React.memo(({ cust, t, identifyCustomer, isGlobal 
     </button>
 ));
 
-const PaymentOptionLabel = React.memo(({ value, currentMethod, onChange, t, title, description, disabled, cartTotal, khataInfo }: any) => (
+const PaymentOptionLabel = React.memo(({ value, currentMethod, onChange, t, title, description, disabled, khataInfo }: any) => (
     <label
         className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all relative ${currentMethod === value
             ? 'border-primary-green bg-green-50 dark:bg-green-900/10'
@@ -219,9 +219,6 @@ export const BillingPage: React.FC = () => {
     const [khataInfo, setKhataInfo] = useState<KhataExplanation | null>(null);
 
     // Global Search State
-    const [globalResults, setGlobalResults] = useState<Customer[]>([]);
-    const [isGlobalLoading, setIsGlobalLoading] = useState(false);
-
     const [globalResults, setGlobalResults] = useState<Customer[]>([]);
     const [isGlobalLoading, setIsGlobalLoading] = useState(false);
 
