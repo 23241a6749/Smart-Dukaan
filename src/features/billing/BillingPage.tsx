@@ -222,9 +222,6 @@ export const BillingPage: React.FC = () => {
     const [globalResults, setGlobalResults] = useState<Customer[]>([]);
     const [isGlobalLoading, setIsGlobalLoading] = useState(false);
 
-    const [globalResults, setGlobalResults] = useState<Customer[]>([]);
-    const [isGlobalLoading, setIsGlobalLoading] = useState(false);
-
     const loadCustomers = React.useCallback(async () => {
         try {
             const response = await customerApi.getAll();
