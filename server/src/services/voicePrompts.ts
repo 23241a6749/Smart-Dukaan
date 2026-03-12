@@ -89,8 +89,8 @@ const PROMPTS: Record<VoiceLang, Record<PromptKey, (ctx?: Record<string, unknown
         closureDispute: () => 'Samajh gaya. Case manual review ke liye bheja. Dhanyavaad.',
     },
     te: {
-        opening: () => 'Namaste. This is Smart Dukkan calling. You have a pending payment of rupees. When can you pay this amount?',
-        noSpeechRetry: () => 'Sorry, I did not hear. Please tell me when you can pay the amount.',
+        opening: () => 'Namaste. This is Smart Dukkan calling. You have a pending bill. When can you pay this amount?',
+        noSpeechRetry: () => 'Sorry, I did not hear. Please tell me when you can pay.',
         noSpeechFinal: () => 'We will call you later. Thank you.',
         askPartialNow: (ctx) => `Can you pay at least ${fmtAmountTe(Number(ctx?.minimumPartial || 0))} rupees today?`,
         askPartialAmount: (ctx) => `How much can you pay right now? Minimum is ${fmtAmountTe(Number(ctx?.minimumPartial || 0))} rupees.`,

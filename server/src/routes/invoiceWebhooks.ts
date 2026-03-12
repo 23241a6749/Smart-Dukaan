@@ -1046,7 +1046,7 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
             }
         }
         
-        console.log(`[Voice] ${invoice.client_name}: "${speechResult}" -> AI: "${aiReply}" | Intent: ${intent} | Conf: ${finalConfidence.toFixed(2)} | Lang: ${lang} | End: ${shouldEnd}`);
+        console.log(`[Voice] ${invoice.client_name}: "${speechResult}" -> AI: "${aiReply}" | Intent: ${intent} | Conf: ${finalConfidence.toFixed(2)} | Lang: ${lang} | End: ${shouldEnd} | nextPrompt: "${nextPrompt?.substring(0, 50)}..."`);
 
         // Log conversation
         invoice.reminder_history.push({
@@ -1114,7 +1114,11 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
 
         // Continue conversation
         await invoice.save();
-        return res.send(buildGatherTwiml(nextPrompt || aiReply, backendUrl, callCount, lang));
+        
+        const finalText = nextPrompt || aiReply;
+        console.log(`[Voice] Sending TwiML with lang=${lang}, voice=Google.${lang.toUpperCase()}-IN-Neural2-A, text="${finalText?.substring(0, 60)}..."`);
+        
+        return res.send(buildGatherTwiml(finalText, backendUrl, callCount, lang));
 
     } catch (e) {
         console.error('[Voice] CRITICAL ERROR:', e);
