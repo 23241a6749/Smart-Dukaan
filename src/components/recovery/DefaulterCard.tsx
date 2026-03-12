@@ -1,7 +1,8 @@
+import React from 'react';
 import { PhoneOutgoing } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 
-const DefaulterCard = ({ customer, onRecover }: { customer: any, onRecover: (customer: any) => void }) => {
+const DefaulterCard = React.memo(({ customer, onRecover }: { customer: any, onRecover: (customer: any) => void }) => {
     const { t } = useLanguage();
     return (
         <div className="bg-white dark:bg-[#111111] p-5 rounded-[1.5rem] border border-gray-100 dark:border-white/5 shadow-sm flex items-center justify-between hover:border-primary-green/30 transition-all hover:bg-gray-50 dark:hover:bg-white/[0.02] group relative overflow-hidden h-24">
@@ -44,6 +45,6 @@ const DefaulterCard = ({ customer, onRecover }: { customer: any, onRecover: (cus
             </div>
         </div>
     );
-};
+});
 
 export default DefaulterCard;

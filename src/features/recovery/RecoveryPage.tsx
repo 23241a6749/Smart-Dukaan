@@ -19,7 +19,7 @@ export default function RecoveryPage() {
         loadCustomers();
     }, []);
 
-    const loadCustomers = async () => {
+    const loadCustomers = React.useCallback(async () => {
         try {
             const response = await customerApi.getAll();
             setAllCustomers(response.data);
@@ -27,28 +27,29 @@ export default function RecoveryPage() {
             console.error("Failed to load customers", e);
             addToast("Failed to sync customers", "error");
         }
-    };
+    }, [addToast]);
 
     const [activeCall, setActiveCall] = useState<RecoveryCustomer | null>(null);
     const [isMissionControlOpen, setIsMissionControlOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'ACTION' | 'SCHEDULED'>('ACTION');
-    const nowTs = Date.now();
+
+    const nowTs = React.useMemo(() => Date.now(), []); // Snapshot for consistent queueing in a render
 
     // Action Queue
-    const actionQueue = allCustomers?.filter((customer: Customer) => {
+    const actionQueue = React.useMemo(() => allCustomers?.filter((customer: Customer) => {
         const hasBalance = customer.khataBalance > 0;
         const isPastPromiseDate = !customer.nextCallDate || (typeof customer.nextCallDate === 'number' && customer.nextCallDate <= nowTs);
         return hasBalance && isPastPromiseDate;
-    }) || [];
+    }) || [], [allCustomers, nowTs]);
 
     // Scheduled Queue
-    const scheduledQueue = allCustomers?.filter((customer: Customer) => {
+    const scheduledQueue = React.useMemo(() => allCustomers?.filter((customer: Customer) => {
         const hasBalance = customer.khataBalance > 0;
         const isFuturePromiseDate = customer.nextCallDate && (typeof customer.nextCallDate === 'number' && customer.nextCallDate > nowTs);
         return hasBalance && isFuturePromiseDate;
-    }) || [];
+    }) || [], [allCustomers, nowTs]);
 
-    const displayCustomers = (viewMode === 'ACTION' ? actionQueue : scheduledQueue).map((customer: Customer) => {
+    const displayCustomers = React.useMemo(() => (viewMode === 'ACTION' ? actionQueue : scheduledQueue).map((customer: Customer) => {
         const createdAt = customer.createdAt
             ? (typeof customer.createdAt === 'string' ? new Date(customer.createdAt).getTime() : customer.createdAt)
             : nowTs;
@@ -71,9 +72,9 @@ export default function RecoveryPage() {
             nextCallDate: customer.nextCallDate,
             recoveryStatus: customer.recoveryStatus
         };
-    });
+    }), [viewMode, actionQueue, scheduledQueue, nowTs, t]);
 
-    const handleCallResult = (result: { status: string; promiseDate: string }) => {
+    const handleCallResult = React.useCallback((result: { status: string; promiseDate: string }) => {
         if (result.status === 'success') {
             addToast(`✅ Promise recorded: ${result.promiseDate}`, 'success');
             loadCustomers();
@@ -86,9 +87,9 @@ export default function RecoveryPage() {
             window.setTimeout(() => loadCustomers(), 15000);
             window.setTimeout(() => loadCustomers(), 30000);
         }
-    };
+    }, [addToast, loadCustomers]);
 
-    const totalPending = (allCustomers?.filter((c: Customer) => c.khataBalance > 0) || []).reduce((sum: number, d: Customer) => sum + d.khataBalance, 0);
+    const totalPending = React.useMemo(() => (allCustomers?.filter((c: Customer) => c.khataBalance > 0) || []).reduce((sum: number, d: Customer) => sum + d.khataBalance, 0), [allCustomers]);
 
     return (
         <div className="min-h-screen bg-[#F8F9FA] dark:bg-[#0A0A0A] pb-48 font-sans text-gray-900">

@@ -17,6 +17,46 @@ interface Product {
   unit: string;
 }
 
+const ProductCard = React.memo(({ product, onEdit }: { product: Product, onEdit: (p: Product) => void }) => {
+  return (
+    <div className="bg-white dark:bg-gray-800 p-5 rounded-[2rem] shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all group">
+      <div className="flex justify-between items-start">
+        <div className="flex gap-4">
+          <div className="w-16 h-16 bg-gray-50 dark:bg-gray-700 rounded-2xl flex items-center justify-center text-4xl shadow-inner uppercase font-black text-gray-400">
+            {product.icon || (product.name ? product.name[0] : '📦')}
+          </div>
+          <div className="space-y-1">
+            <div className="font-black text-gray-900 dark:text-white text-xl leading-tight">{product.name}</div>
+            <div className="flex items-center gap-2">
+              <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">{product.category}</span>
+              <span className="text-[10px] text-gray-300 font-black tracking-widest">{product.unit.toUpperCase()}</span>
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={() => onEdit(product)}
+          className="p-3 bg-gray-50 dark:bg-gray-700 text-gray-400 hover:text-primary-green hover:bg-green-50 rounded-xl transition-all"
+        >
+          <Edit2 size={20} />
+        </button>
+      </div>
+
+      <div className="mt-6 flex justify-between items-end border-t border-gray-50 dark:border-gray-700 pt-4">
+        <div>
+          <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Price</div>
+          <div className="text-2xl font-black text-primary-green">₹{product.price} / {product.unit}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Current Stock</div>
+          <div className={`text-xl font-black ${product.stock <= product.minStock ? 'text-red-500' : 'text-gray-900 dark:text-white'}`}>
+            {product.stock} {product.unit}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export const ProductPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const { t } = useLanguage();
@@ -28,20 +68,20 @@ export const ProductPage: React.FC = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({ name: '', price: 0, stock: 0, minStock: 5, category: '', icon: '📦', unit: 'piece' });
 
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  async function loadProducts() {
+  const loadProducts = React.useCallback(async () => {
     try {
       const response = await productApi.getAll();
       setProducts(response.data);
     } catch (err) {
       console.error('Failed to load products', err);
     }
-  }
+  }, []);
 
-  const handleSave = async () => {
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  const handleSave = React.useCallback(async () => {
     if (!formData.name || formData.price <= 0 || formData.stock < 0) {
       addToast('Please fill all fields correctly', 'error');
       return;
@@ -63,9 +103,9 @@ export const ProductPage: React.FC = () => {
       console.error('Failed to save product', err);
       addToast('Failed to save product', 'error');
     }
-  };
+  }, [formData, editingId, addToast, loadProducts]);
 
-  const startEdit = (product: Product) => {
+  const startEdit = React.useCallback((product: Product) => {
     setEditingId(product._id!);
     setFormData({
       name: product.name,
@@ -77,14 +117,18 @@ export const ProductPage: React.FC = () => {
       unit: product.unit
     });
     setShowForm(true);
-  };
+  }, []);
 
-  const filteredProducts = translatedProducts.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProducts = React.useMemo(() => {
+    return translatedProducts.filter(p =>
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.category.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [translatedProducts, searchTerm]);
 
-  const lowStockProducts = products.filter(p => p.stock <= p.minStock);
+  const lowStockProducts = React.useMemo(() => {
+    return products.filter(p => p.stock <= p.minStock);
+  }, [products]);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-48">
@@ -137,41 +181,7 @@ export const ProductPage: React.FC = () => {
       {/* Product List */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredProducts.map((product) => (
-          <div key={product._id} className="bg-white dark:bg-gray-800 p-5 rounded-[2rem] shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all group">
-            <div className="flex justify-between items-start">
-              <div className="flex gap-4">
-                <div className="w-16 h-16 bg-gray-50 dark:bg-gray-700 rounded-2xl flex items-center justify-center text-4xl shadow-inner uppercase font-black text-gray-400">
-                  {product.icon || (product.name ? product.name[0] : '📦')}
-                </div>
-                <div className="space-y-1">
-                  <div className="font-black text-gray-900 dark:text-white text-xl leading-tight">{product.name}</div>
-                  <div className="flex items-center gap-2">
-                    <span className="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">{product.category}</span>
-                    <span className="text-[10px] text-gray-300 font-black tracking-widest">{product.unit.toUpperCase()}</span>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => startEdit(product)}
-                className="p-3 bg-gray-50 dark:bg-gray-700 text-gray-400 hover:text-primary-green hover:bg-green-50 rounded-xl transition-all"
-              >
-                <Edit2 size={20} />
-              </button>
-            </div>
-
-            <div className="mt-6 flex justify-between items-end border-t border-gray-50 dark:border-gray-700 pt-4">
-              <div>
-                <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Price</div>
-                <div className="text-2xl font-black text-primary-green">₹{product.price} / {product.unit}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Current Stock</div>
-                <div className={`text-xl font-black ${product.stock <= product.minStock ? 'text-red-500' : 'text-gray-900 dark:text-white'}`}>
-                  {product.stock} {product.unit}
-                </div>
-              </div>
-            </div>
-          </div>
+          <ProductCard key={product._id} product={product} onEdit={startEdit} />
         ))}
       </div>
 
