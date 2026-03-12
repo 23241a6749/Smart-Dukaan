@@ -689,7 +689,7 @@ export default function WhatsAppPage() {
                         <h2 className="text-xl font-black text-slate-900 dark:text-white">Queue Snapshot</h2>
                         <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
                             <p>Total pipeline value: <span className="font-bold text-slate-900 dark:text-white">Rs.{todayRevenuePotential.toLocaleString()}</span></p>
-                            <p>Pending khata in WhatsApp window: <span className="font-bold text-slate-900 dark:text-white">Rs.{analytics.pendingTotal.toLocaleString()}</span></p>
+                            <p>Pending udhaar in WhatsApp window: <span className="font-bold text-slate-900 dark:text-white">Rs.{analytics.pendingTotal.toLocaleString()}</span></p>
                             <p>Debtors in active list: <span className="font-bold text-slate-900 dark:text-white">{analytics.activeDebtors}</span></p>
                         </div>
                     </div>

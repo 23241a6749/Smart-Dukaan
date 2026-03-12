@@ -290,7 +290,7 @@ export const CustomerPage: React.FC = () => {
                     {/* Khata Score Section */}
                     {khataDetails[customer.phoneNumber] && (
                       <div className="hidden md:block">
-                        <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">Khata Score</div>
+                        <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">Udhaar Score</div>
                         <div className="flex items-center gap-2">
                           <div className="px-2 py-1 bg-gradient-to-r from-primary-green to-blue-600 rounded-lg text-white font-black text-sm">
                             {khataDetails[customer.phoneNumber].score}
@@ -484,7 +484,7 @@ export const CustomerPage: React.FC = () => {
               {/* Stats Bar */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] shadow-sm border border-gray-100 dark:border-gray-700">
-                  <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">Khata Score</div>
+                  <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">Udhaar Score</div>
                   <div className="text-3xl font-black text-primary-green">{khataDetails[viewingCustomer.phoneNumber]?.score || 600}</div>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] shadow-sm border border-gray-100 dark:border-gray-700">
@@ -521,7 +521,7 @@ export const CustomerPage: React.FC = () => {
                           : 'text-gray-400 hover:text-gray-600'
                           }`}
                       >
-                        {tab === 'all' ? 'All' : tab === 'khata' ? 'Khata Debt' : tab === 'settlement' ? 'Settlements' : 'Instant Paid'}
+                        {tab === 'all' ? 'All' : tab === 'khata' ? 'Udhaar Debt' : tab === 'settlement' ? 'Settlements' : 'Instant Paid'}
                       </button>
                     ))}
                   </div>
@@ -570,7 +570,7 @@ export const CustomerPage: React.FC = () => {
                           cardStyle = 'bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/30';
                           icon = '📉';
                           iconBg = 'bg-orange-500 text-white';
-                          label = 'Khata Added';
+                          label = 'Udhaar Added';
                           amountColor = 'text-orange-600';
                           subLabel = 'Added to Debt';
                         } else if (isInstant) {

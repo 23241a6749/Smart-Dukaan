@@ -439,7 +439,7 @@ export const BillingPage: React.FC = () => {
                 await recalculateKhataScore(selectedCustomer.phoneNumber);
             }
 
-            addToast('Khata Verified & Transaction Complete!', 'success');
+            addToast('Udhaar Verified & Transaction Complete!', 'success');
             setShowOtpInput(false);
             setIsProcessing(false);
             loadProducts();
