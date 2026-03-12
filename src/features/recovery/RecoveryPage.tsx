@@ -6,9 +6,11 @@ import RecoveryMissionControl from '../../components/recovery/RecoveryMissionCon
 import { useToast } from '../../contexts/ToastContext';
 import { customerApi } from '../../services/api';
 import type { Customer } from '../../db/db';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export default function RecoveryPage() {
     const { addToast } = useToast();
+    const { t } = useLanguage();
 
     // Fetch all customers from API
     const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
@@ -61,7 +63,7 @@ export default function RecoveryPage() {
 
         return {
             id: customer._id || (customer.id ? customer.id.toString() : 'unknown'),
-            name: customer.name || 'Unknown',
+            name: customer.name || t['Unnamed Customer'],
             amount: khataBalance,
             days: daysOverdue > 0 ? daysOverdue : 1,
             phone: customer.phoneNumber,
@@ -99,7 +101,7 @@ export default function RecoveryPage() {
                                 <div className="p-2.5 bg-primary-green rounded-xl text-white">
                                     <ShieldCheck size={24} />
                                 </div>
-                                Recovery Agent
+                                {t['Recovery Agent']}
                             </h1>
                         </div>
                     </div>
@@ -108,16 +110,16 @@ export default function RecoveryPage() {
                         <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 transition-all duration-700"></div>
                         <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4">
                             <div>
-                                <p className="text-green-100 text-[10px] font-black uppercase tracking-[0.2em] mb-1">Total Outstanding</p>
+                                <p className="text-green-100 text-[10px] font-black uppercase tracking-[0.2em] mb-1">{t['Total Outstanding']}</p>
                                 <h2 className="text-4xl font-black tracking-tighter">₹{totalPending.toLocaleString()}</h2>
                             </div>
                             <div className="flex gap-2">
                                 <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 text-center min-w-[100px]">
-                                    <p className="text-[8px] uppercase font-black opacity-60">Success</p>
+                                    <p className="text-[8px] uppercase font-black opacity-60">{t['Success']}</p>
                                     <p className="text-lg font-black">94%</p>
                                 </div>
                                 <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/10 text-center min-w-[100px]">
-                                    <p className="text-[8px] uppercase font-black opacity-60">Avg. Days</p>
+                                    <p className="text-[8px] uppercase font-black opacity-60">{t['Avg. Days']}</p>
                                     <p className="text-lg font-black">12d</p>
                                 </div>
                             </div>
@@ -136,7 +138,7 @@ export default function RecoveryPage() {
                             : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
                             }`}
                     >
-                        Pending ({actionQueue.length})
+                        {t['Pending']} ({actionQueue.length})
                     </button>
                     <button
                         onClick={() => setViewMode('SCHEDULED')}
@@ -145,7 +147,7 @@ export default function RecoveryPage() {
                             : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
                             }`}
                     >
-                        Follow-ups ({scheduledQueue.length})
+                        {t['Follow-ups']} ({scheduledQueue.length})
                     </button>
                 </div>
 
@@ -160,8 +162,8 @@ export default function RecoveryPage() {
                                 <Zap size={20} fill="currentColor" />
                             </div>
                             <div className="text-left">
-                                <h4 className="font-black text-sm text-gray-900 dark:text-white">AI Voice Control</h4>
-                                <p className="text-[10px] text-gray-500 font-bold">Automated recovery for {actionQueue.length} customers</p>
+                                <h4 className="font-black text-sm text-gray-900 dark:text-white">{t['AI Voice Control']}</h4>
+                                <p className="text-[10px] text-gray-500 font-bold">{t['Automated recovery for']} {actionQueue.length} {t['Customers']}</p>
                             </div>
                         </div>
                         <ArrowRight size={18} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
@@ -214,8 +216,8 @@ export default function RecoveryPage() {
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 opacity-30 text-center">
                             <ShieldCheck className="text-gray-400 mb-4" size={48} />
-                            <h3 className="text-lg font-black text-gray-900 dark:text-white">All Clear</h3>
-                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">No actions required</p>
+                            <h3 className="text-lg font-black text-gray-900 dark:text-white">{t['All Clear']}</h3>
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">{t['No actions required']}</p>
                         </div>
                     )}
                 </div>

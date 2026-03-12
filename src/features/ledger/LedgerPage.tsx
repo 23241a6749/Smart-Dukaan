@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { billApi } from '../../services/api';
 import { Receipt, Calendar, User, Tag } from 'lucide-react';
 import type { Transaction } from '../../db/db';
+import { useTranslate } from '../../hooks/useTranslate';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const LedgerPage: React.FC = () => {
     const [bills, setBills] = useState<Transaction[]>([]);
@@ -47,6 +49,22 @@ export const LedgerPage: React.FC = () => {
         });
     };
 
+    const { t, language } = useLanguage();
+
+    // Flatten all items to translate their names
+    const allItems = bills.flatMap(b => b.items || []).map(i => ({ name: i.name }));
+    const translatedItems = useTranslate(allItems, ['name']);
+
+    // Create a lookup map for translated names
+    const itemNameMap: Record<string, string> = {};
+    if (language !== 'en') {
+        allItems.forEach((orig, idx) => {
+            if (translatedItems[idx]) {
+                itemNameMap[orig.name] = translatedItems[idx].name;
+            }
+        });
+    }
+
     const getStatusStyles = (mode: string) => {
         switch (mode) {
             case 'cash': return 'bg-green-100 text-green-700 border-green-200';
@@ -60,8 +78,8 @@ export const LedgerPage: React.FC = () => {
         <div className="space-y-6 pb-48">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h2 className="text-3xl font-black text-gray-900 dark:text-white">Shop Ledger</h2>
-                    <p className="text-gray-500 text-sm">Real-time audit of all sales and payments</p>
+                    <h2 className="text-3xl font-black text-gray-900 dark:text-white">{t['Shop Ledger']}</h2>
+                    <p className="text-gray-500 text-sm">{t['Real-time audit of all sales and payments']}</p>
                 </div>
                 <div className="flex gap-2">
                     <div className="bg-white dark:bg-gray-800 p-1 rounded-2xl border border-gray-100 dark:border-gray-700 flex">
@@ -105,7 +123,7 @@ export const LedgerPage: React.FC = () => {
             {/* Transactions */}
             <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm">
                 <div className="p-6 border-b border-gray-50 dark:border-gray-700 flex justify-between items-center">
-                    <h3 className="font-black text-gray-900 dark:text-white">Recent Transactions</h3>
+                    <h3 className="font-black text-gray-900 dark:text-white">{t['Recent Transactions']}</h3>
                     <Receipt size={20} className="text-gray-300" />
                 </div>
                 <div className="divide-y divide-gray-50 dark:divide-gray-700">
@@ -147,7 +165,7 @@ export const LedgerPage: React.FC = () => {
                                     <div className="flex flex-wrap gap-2">
                                         {bill.items?.map((item, idx) => (
                                             <div key={idx} className="bg-gray-50 dark:bg-gray-800 border dark:border-gray-700 px-3 py-1.5 rounded-lg flex items-center gap-2">
-                                                <span className="text-xs font-bold text-gray-600 dark:text-gray-300">{item.name}</span>
+                                                <span className="text-xs font-bold text-gray-600 dark:text-gray-300">{itemNameMap[item.name] || item.name}</span>
                                                 <span className="text-[10px] font-black text-gray-400">×{item.quantity}</span>
                                             </div>
                                         ))}

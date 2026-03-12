@@ -4,8 +4,10 @@ import { customerApi, ledgerApi } from '../../services/api';
 import type { Customer } from '../../db/db';
 import { db } from '../../db/db';
 import { getKhataStatus, recalculateKhataScore } from '../../lib/khataLogic';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 export const CustomerPage: React.FC = () => {
+  const { t } = useLanguage();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -188,7 +190,7 @@ export const CustomerPage: React.FC = () => {
     <div className="space-y-6 pb-48">
       <div className="flex justify-between items-center mb-4">
         <div>
-          <h2 className="text-3xl font-black text-gray-900 dark:text-white">Customer Network</h2>
+          <h2 className="text-3xl font-black text-gray-900 dark:text-white">{t['Customers']}</h2>
         </div>
       </div>
 
@@ -201,7 +203,7 @@ export const CustomerPage: React.FC = () => {
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="tel"
-                  placeholder="10-digit mobile"
+                  placeholder={t['10-digit mobile']}
                   maxLength={10}
                   value={formData.phoneNumber}
                   onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value.replace(/\D/g, '') })}
@@ -215,7 +217,7 @@ export const CustomerPage: React.FC = () => {
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
-                  placeholder="e.g. Rahul Sharma"
+                  placeholder={t['e.g. Rahul Sharma']}
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-transparent focus:border-primary-green rounded-xl p-3 pl-10 outline-none transition-all dark:text-white"
@@ -224,8 +226,8 @@ export const CustomerPage: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={handleAddCustomer} className="flex-1 bg-primary-green text-white py-3 rounded-xl font-bold">Save Customer</button>
-            <button onClick={() => setShowForm(false)} className="px-6 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold">Cancel</button>
+            <button onClick={handleAddCustomer} className="flex-1 bg-primary-green text-white py-3 rounded-xl font-bold">{t['New Customer']}</button>
+            <button onClick={() => setShowForm(false)} className="px-6 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold">{t['Cancel']}</button>
           </div>
         </div>
       )}
@@ -234,7 +236,7 @@ export const CustomerPage: React.FC = () => {
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
         <input
           type="text"
-          placeholder="Search by name or phone..."
+          placeholder={t['Search by name or phone']}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-white dark:bg-gray-800 border-none rounded-2xl p-4 pl-12 shadow-sm outline-none focus:ring-2 focus:ring-primary-green/20 transition-all dark:text-white"
@@ -245,7 +247,7 @@ export const CustomerPage: React.FC = () => {
         {filteredCustomers.length === 0 ? (
           <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-3xl border-2 border-dashed border-gray-100 dark:border-gray-700">
             <User size={48} className="mx-auto text-gray-300 mb-2" />
-            <p className="text-gray-500 mb-4">No customers found</p>
+            <p className="text-gray-500 mb-4">{t['No customer data yet']}</p>
             <button
               onClick={async () => {
                 try {
@@ -277,7 +279,7 @@ export const CustomerPage: React.FC = () => {
                     </div>
                     <div>
                       <div className="font-black text-gray-900 dark:text-white text-lg flex items-center gap-2">
-                        {customer.name || 'Anonymous Customer'}
+                        {customer.name || t['Unnamed Customer']}
                         {customer.khataBalance > 1500 && <AlertCircle size={16} className="text-red-500" />}
                       </div>
                       <div className="text-gray-500 font-medium flex items-center gap-1">
@@ -290,7 +292,7 @@ export const CustomerPage: React.FC = () => {
                     {/* Khata Score Section */}
                     {khataDetails[customer.phoneNumber] && (
                       <div className="hidden md:block">
-                        <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">Udhaar Score</div>
+                        <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">{t['Udhaar Score']}</div>
                         <div className="flex items-center gap-2">
                           <div className="px-2 py-1 bg-gradient-to-r from-primary-green to-blue-600 rounded-lg text-white font-black text-sm">
                             {khataDetails[customer.phoneNumber].score}
@@ -309,11 +311,11 @@ export const CustomerPage: React.FC = () => {
                     )}
 
                     <div className="text-center md:text-right order-2 md:order-1">
-                      <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider">Ledge Balance</div>
+                      <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider">{t['Due Balance']}</div>
                       <div className={`text-2xl font-black ${styles.text}`}>₹{customer.khataBalance} <span className="text-lg opacity-50">{styles.icon}</span></div>
                     </div>
                     <div className="flex flex-col gap-1 order-1 md:order-3 text-sm text-gray-500 font-bold">
-                      <div className="flex items-center gap-2"><History size={14} className="text-primary-green" /><span>Activity Log</span></div>
+                      <div className="flex items-center gap-2"><History size={14} className="text-primary-green" /><span>{t['Activity Log']}</span></div>
                       <div className="flex items-center gap-2"><Calendar size={14} className="text-orange-400" /><span>{formatDate(customer.lastVisit || customer.createdAt)}</span></div>
                       <div className="flex items-center gap-2"><TrendingUp size={14} className="text-orange-400" /><span>Limit: ₹{khataDetails[customer.phoneNumber]?.limit || 3000}</span></div>
                       {customer.khataBalance > 0 && (
@@ -325,7 +327,7 @@ export const CustomerPage: React.FC = () => {
                           }}
                           className="mt-1 text-xs bg-orange-500 text-white px-2 py-1 rounded-lg font-black uppercase tracking-tighter shadow-sm active:scale-95 transition-all"
                         >
-                          Settle Dues
+                          {t['Settle Dues']}
                         </button>
                       )}
                     </div>
@@ -362,8 +364,8 @@ export const CustomerPage: React.FC = () => {
           <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-300">
             <div className="p-8 pb-4 flex justify-between items-start">
               <div>
-                <h3 className="text-2xl font-black text-gray-900 dark:text-white">Credit Health</h3>
-                <p className="text-gray-500 font-medium">Why this score for {selectedExplainer.name}?</p>
+                <h3 className="text-2xl font-black text-gray-900 dark:text-white">{t['Credit Health']}</h3>
+                <p className="text-gray-500 font-medium">{t['Why this score for']} {selectedExplainer.name}?</p>
               </div>
               <button onClick={() => setSelectedExplainer(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full dark:text-gray-400"><X size={24} /></button>
             </div>
@@ -371,20 +373,20 @@ export const CustomerPage: React.FC = () => {
             <div className="px-8 py-6 space-y-6">
               <div className="text-center">
                 <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary-green to-blue-500 mb-2">{selectedExplainer.score}</div>
-                <div className="text-xs uppercase font-black text-gray-400 tracking-[0.2em]">Current Rating</div>
+                <div className="text-xs uppercase font-black text-gray-400 tracking-[0.2em]">{t['Current Rating']}</div>
               </div>
 
               <div className="bg-gray-50 dark:bg-gray-900 rounded-3xl p-6 space-y-4">
                 <div className="flex items-start gap-3">
                   <ShieldCheck className="text-primary-green mt-1 flex-shrink-0" size={20} />
                   <div>
-                    <div className="font-black text-gray-900 dark:text-white text-sm">Credit Limit: ₹{selectedExplainer.limit}</div>
-                    <p className="text-xs text-gray-500 font-medium italic">Based strictly on behavior logic, no manual override.</p>
+                    <div className="font-black text-gray-900 dark:text-white text-sm">{t['Credit Limit']}: ₹{selectedExplainer.limit}</div>
+                    <p className="text-xs text-gray-500 font-medium italic">{t['Based strictly on behavior logic.']}</p>
                   </div>
                 </div>
 
                 <div className="space-y-3 pt-2">
-                  <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider">Logic Reasons</div>
+                  <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider">{t['Logic Reasons']}</div>
                   {selectedExplainer.reasons.map((reason: string, i: number) => (
                     <div key={i} className="flex gap-2 text-sm text-gray-600 dark:text-gray-300 leading-snug">
                       <span className="text-primary-green">●</span>
@@ -401,7 +403,7 @@ export const CustomerPage: React.FC = () => {
             </div>
 
             <div className="p-8 pt-0">
-              <button onClick={() => setSelectedExplainer(null)} className="w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-black text-lg shadow-xl shadow-gray-200 dark:shadow-none">GOT IT</button>
+              <button onClick={() => setSelectedExplainer(null)} className="w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-black text-lg shadow-xl shadow-gray-200 dark:shadow-none">{t['GOT IT']}</button>
             </div>
           </div>
         </div>
@@ -411,12 +413,12 @@ export const CustomerPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white dark:bg-gray-800 w-full max-w-sm rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-300">
             <div className="p-8 pb-0 flex justify-between items-start">
-              <h3 className="text-2xl font-black text-gray-900 dark:text-white">Record Payment</h3>
+              <h3 className="text-2xl font-black text-gray-900 dark:text-white">{t['Record Payment']}</h3>
               <button onClick={() => setSettleModal(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full dark:text-gray-400"><X size={24} /></button>
             </div>
             <div className="p-8 space-y-6">
               <div>
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Amount to Settle</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">{t['Amount to Settle']}</label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-gray-400">₹</span>
                   <input
@@ -426,23 +428,23 @@ export const CustomerPage: React.FC = () => {
                     className="w-full bg-gray-50 dark:bg-gray-900 py-6 px-10 rounded-3xl text-3xl font-black text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-green/20"
                   />
                 </div>
-                <p className="mt-2 text-xs text-orange-500 font-bold">Total Dues: ₹{settleModal.khataBalance}</p>
+                <p className="mt-2 text-xs text-orange-500 font-bold">{t['Total Dues']}: ₹{settleModal.khataBalance}</p>
               </div>
 
               <div>
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">Payment Mode</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 block">{t['Payment Mode']}</label>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setSettleMode('cash')}
                     className={`flex-1 py-3 rounded-2xl font-bold border-2 transition-all ${settleMode === 'cash' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-500'}`}
                   >
-                    CASH
+                    {t['Cash']}
                   </button>
                   <button
                     onClick={() => setSettleMode('online')}
                     className={`flex-1 py-3 rounded-2xl font-bold border-2 transition-all ${settleMode === 'online' ? 'bg-purple-500 border-purple-500 text-white' : 'border-gray-100 dark:border-gray-700 text-gray-500'}`}
                   >
-                    UPI / ONLINE
+                    {t['UPI / ONLINE']}
                   </button>
                 </div>
               </div>
@@ -452,8 +454,8 @@ export const CustomerPage: React.FC = () => {
                 disabled={isProcessing || settleAmount <= 0}
                 className="w-full bg-primary-green text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-primary-green/20 flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50"
               >
-                {isProcessing ? 'Processing...' : (
-                  <><CheckCircle2 size={20} /> Record Payment</>
+                {isProcessing ? t['Verifying...'] : (
+                  <><CheckCircle2 size={20} /> {t['Record Payment']}</>
                 )}
               </button>
             </div>
@@ -474,7 +476,7 @@ export const CustomerPage: React.FC = () => {
                     {viewingCustomer.name?.[0] || 'C'}
                   </div>
                   <div>
-                    <h3 className="text-3xl font-black text-gray-900 dark:text-white leading-tight">{viewingCustomer.name || 'Anonymous'}</h3>
+                    <h3 className="text-3xl font-black text-gray-900 dark:text-white leading-tight">{viewingCustomer.name || t['Unnamed Customer']}</h3>
                     <p className="text-gray-500 font-bold">{viewingCustomer.phoneNumber}</p>
                   </div>
                 </div>
@@ -484,11 +486,11 @@ export const CustomerPage: React.FC = () => {
               {/* Stats Bar */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] shadow-sm border border-gray-100 dark:border-gray-700">
-                  <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">Udhaar Score</div>
+                  <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">{t['Udhaar Score']}</div>
                   <div className="text-3xl font-black text-primary-green">{khataDetails[viewingCustomer.phoneNumber]?.score || 600}</div>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-[2rem] shadow-sm border border-gray-100 dark:border-gray-700">
-                  <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">Due Balance</div>
+                  <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">{t['Due Balance']}</div>
                   <div className="text-3xl font-black text-orange-500">₹{viewingCustomer.khataBalance}</div>
                 </div>
               </div>
@@ -496,7 +498,7 @@ export const CustomerPage: React.FC = () => {
               <div className="space-y-4">
                 <div className="flex flex-col gap-4">
                   <div className="flex justify-between items-center">
-                    <h4 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Activity Log</h4>
+                    <h4 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">{t['Activity Log']}</h4>
                     {viewingCustomer.khataBalance > 0 && (
                       <button
                         onClick={() => {
@@ -505,7 +507,7 @@ export const CustomerPage: React.FC = () => {
                         }}
                         className="bg-primary-green text-white px-4 py-2 rounded-xl text-sm font-black shadow-lg shadow-primary-green/20"
                       >
-                        SETTLE DUES
+                        {t['SETTLE DUES']}
                       </button>
                     )}
                   </div>
@@ -521,7 +523,7 @@ export const CustomerPage: React.FC = () => {
                           : 'text-gray-400 hover:text-gray-600'
                           }`}
                       >
-                        {tab === 'all' ? 'All' : tab === 'khata' ? 'Udhaar Debt' : tab === 'settlement' ? 'Settlements' : 'Instant Paid'}
+                        {tab === 'all' ? t['All'] : tab === 'khata' ? t['Udhaar Debt'] : tab === 'settlement' ? t['Settlements'] : t['Instant Paid']}
                       </button>
                     ))}
                   </div>
@@ -537,7 +539,7 @@ export const CustomerPage: React.FC = () => {
                       return true;
                     })
                     .length === 0 ? (
-                    <div className="text-center py-10 text-gray-400 font-bold italic">No records found</div>
+                    <div className="text-center py-10 text-gray-400 font-bold italic">{t['No customer data yet']}</div>
                   ) : (
                     customerTransactions
                       .filter(tx => {

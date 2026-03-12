@@ -1,6 +1,8 @@
-import { PhoneOutgoing, Clock } from 'lucide-react';
+import { PhoneOutgoing } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const DefaulterCard = ({ customer, onRecover }: { customer: any, onRecover: (customer: any) => void }) => {
+    const { t } = useLanguage();
     return (
         <div className="bg-white dark:bg-[#111111] p-5 rounded-[1.5rem] border border-gray-100 dark:border-white/5 shadow-sm flex items-center justify-between hover:border-primary-green/30 transition-all hover:bg-gray-50 dark:hover:bg-white/[0.02] group relative overflow-hidden h-24">
             <div className="absolute top-0 right-0 w-32 h-32 bg-primary-green/5 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-primary-green/10 transition-colors"></div>
@@ -21,10 +23,10 @@ const DefaulterCard = ({ customer, onRecover }: { customer: any, onRecover: (cus
                             ₹{customer.amount.toLocaleString()}
                         </span>
                         <div className={`text-[8px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest ${customer.risk === 'HIGH' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                                customer.risk === 'MEDIUM' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
-                                    'bg-green-500/10 text-green-500 border-green-500/20'
+                            customer.risk === 'MEDIUM' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
+                                'bg-green-500/10 text-green-500 border-green-500/20'
                             }`}>
-                            {customer.risk}
+                            {t[customer.risk] || customer.risk}
                         </div>
                     </div>
                 </div>
@@ -37,7 +39,7 @@ const DefaulterCard = ({ customer, onRecover }: { customer: any, onRecover: (cus
                     className="h-10 px-6 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all active:scale-95 bg-primary-green text-white shadow-lg shadow-primary-green/20 hover:bg-green-600"
                 >
                     <PhoneOutgoing size={14} />
-                    RECOVER
+                    {t['RECOVER']}
                 </button>
             </div>
         </div>

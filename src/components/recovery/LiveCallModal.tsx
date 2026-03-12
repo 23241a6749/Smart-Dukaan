@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Phone, Mic, CheckCircle, AlertTriangle, AudioLines, PhoneOff, RotateCcw, Clock } from 'lucide-react';
+import { Phone, CheckCircle, AlertTriangle, AudioLines, PhoneOff, RotateCcw, Clock } from 'lucide-react';
 import { customerApi, invoiceApi } from '../../services/api';
 
 export interface RecoveryCustomer {
@@ -19,7 +19,7 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
     const [transcript, setTranscript] = useState<Array<{ role: 'assistant' | 'user' | 'system'; text: string }>>([]);
     const [insight, setInsight] = useState('Initializing recovery agent...');
     const [callDuration, setCallDuration] = useState(0);
-    const [lastUpdate, setLastUpdate] = useState<string>('');
+    const [_lastUpdate, setLastUpdate] = useState<string>('');
     const [activeInvoiceId, setActiveInvoiceId] = useState<string>('');
     const [sessionStartedAtIso, setSessionStartedAtIso] = useState<string>('');
     const timerRef = useRef<number | null>(null);

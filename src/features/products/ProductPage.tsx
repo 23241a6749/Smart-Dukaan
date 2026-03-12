@@ -3,6 +3,8 @@ import { Plus, Search, AlertTriangle, Edit2, X, Package, Tag, Archive } from 'lu
 import { useNavigate } from 'react-router-dom';
 import { productApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useTranslate } from '../../hooks/useTranslate';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface Product {
   _id?: string;
@@ -17,6 +19,8 @@ interface Product {
 
 export const ProductPage: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  const { t } = useLanguage();
+  const translatedProducts = useTranslate(products, ['name', 'category']);
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -75,19 +79,19 @@ export const ProductPage: React.FC = () => {
     setShowForm(true);
   };
 
-  const filteredProducts = products.filter(p =>
+  const filteredProducts = translatedProducts.filter(p =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const lowStockProducts = filteredProducts.filter(p => p.stock <= p.minStock);
+  const lowStockProducts = products.filter(p => p.stock <= p.minStock);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-48">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-black text-gray-900 dark:text-white">Shop Inventory</h2>
-          <p className="text-gray-500 text-sm font-medium">Manage prices, stock, and categories</p>
+          <h2 className="text-3xl font-black text-gray-900 dark:text-white">{t['Products']}</h2>
+          <p className="text-gray-500 text-sm font-medium">{t['Manage prices, stock, and categories'] || 'Manage prices, stock, and categories'}</p>
         </div>
         <button
           onClick={() => navigate('/supplier-bills')}

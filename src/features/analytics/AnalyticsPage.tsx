@@ -5,10 +5,13 @@ import {
   BarChart, Bar, PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { billApi } from '../../services/api';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { useTranslate } from '../../hooks/useTranslate';
 
 const COLORS = ['#059669', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6B7280'];
 
 export const AnalyticsPage: React.FC = () => {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalRevenue: 0,
@@ -21,6 +24,10 @@ export const AnalyticsPage: React.FC = () => {
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [productPieData, setProductPieData] = useState<any[]>([]);
   const [topCustomers, setTopCustomers] = useState<any[]>([]);
+
+  // Translated versions for display — safe copies, original state unchanged.
+  const translatedTopProducts = useTranslate(topProducts, ['name']);
+  const translatedProductPieData = useTranslate(productPieData, ['name']);
 
   useEffect(() => {
     loadAnalytics();
@@ -131,10 +138,10 @@ export const AnalyticsPage: React.FC = () => {
   return (
     <div className="space-y-6 pb-48">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
+        <h2 className="text-2xl font-bold text-gray-900">{t['Dashboard']}</h2>
         <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg shadow-sm text-sm text-gray-600">
           <Calendar size={16} />
-          <span>Last 30 Days</span>
+          <span>{t['Last 30 Days']}</span>
         </div>
       </div>
 
@@ -145,7 +152,7 @@ export const AnalyticsPage: React.FC = () => {
             <div className="p-2 bg-green-100 text-green-700 rounded-lg">
               <DollarSign size={20} />
             </div>
-            <span className="text-gray-500 text-sm font-medium">Total Revenue</span>
+            <span className="text-gray-500 text-sm font-medium">{t['Total Revenue']}</span>
           </div>
           <div className="text-2xl font-bold text-gray-900">₹{stats.totalRevenue.toLocaleString()}</div>
         </div>
@@ -155,10 +162,10 @@ export const AnalyticsPage: React.FC = () => {
             <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
               <ShoppingBag size={20} />
             </div>
-            <span className="text-gray-500 text-sm font-medium">Total Orders</span>
+            <span className="text-gray-500 text-sm font-medium">{t['Total Orders']}</span>
           </div>
           <div className="text-2xl font-bold text-gray-900">{stats.totalSales}</div>
-          <div className="text-xs text-gray-500 mt-1">across all channels</div>
+          <div className="text-xs text-gray-500 mt-1">{t['across all channels']}</div>
         </div>
 
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
@@ -166,16 +173,16 @@ export const AnalyticsPage: React.FC = () => {
             <div className="p-2 bg-purple-100 text-purple-700 rounded-lg">
               <CreditCard size={20} />
             </div>
-            <span className="text-gray-500 text-sm font-medium">Avg. Order Value</span>
+            <span className="text-gray-500 text-sm font-medium">{t['Avg. Order Value']}</span>
           </div>
           <div className="text-2xl font-bold text-gray-900">₹{Math.round(stats.avgTransaction)}</div>
-          <div className="text-xs text-gray-500 mt-1">per customer</div>
+          <div className="text-xs text-gray-500 mt-1">{t['per customer']}</div>
         </div>
       </div>
 
       {/* Revenue Trend (Full Width) */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-        <h3 className="font-semibold text-gray-800 mb-6">Revenue Trend</h3>
+        <h3 className="font-semibold text-gray-800 mb-6">{t['Revenue Trend']}</h3>
         <div className="h-64 rounded-lg bg-gray-50 p-2">
           {revenueData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -202,7 +209,7 @@ export const AnalyticsPage: React.FC = () => {
                 />
                 <Tooltip
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                  formatter={(value: any) => [`₹${value}`, 'Revenue']}
+                  formatter={(value: any) => [`₹${value}`, t['Revenue']]}
                 />
                 <Area
                   type="monotone"
@@ -215,7 +222,7 @@ export const AnalyticsPage: React.FC = () => {
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="h-full flex items-center justify-center text-gray-400">No revenue data available</div>
+            <div className="h-full flex items-center justify-center text-gray-400">{t['No revenue data available']}</div>
           )}
         </div>
       </div>
@@ -224,7 +231,7 @@ export const AnalyticsPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Payment Methods */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-          <h3 className="font-semibold text-gray-800 mb-6">Payment Distribution</h3>
+          <h3 className="font-semibold text-gray-800 mb-6">{t['Payment Distribution']}</h3>
           <div className="h-64 rounded-lg bg-gray-50 p-2 w-full">
             {paymentData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -247,20 +254,20 @@ export const AnalyticsPage: React.FC = () => {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-gray-400">No payment data</div>
+              <div className="h-full flex items-center justify-center text-gray-400">{t['No payment data']}</div>
             )}
           </div>
         </div>
 
         {/* Product Share */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-          <h3 className="font-semibold text-gray-800 mb-6">Product Sales Share</h3>
+          <h3 className="font-semibold text-gray-800 mb-6">{t['Product Sales Share']}</h3>
           <div className="h-64 rounded-lg bg-gray-50 p-2 w-full">
-            {productPieData.length > 0 ? (
+            {translatedProductPieData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={productPieData}
+                    data={translatedProductPieData}
                     cx="50%"
                     cy="50%"
                     innerRadius={60}
@@ -268,7 +275,7 @@ export const AnalyticsPage: React.FC = () => {
                     paddingAngle={5}
                     dataKey="value"
                   >
-                    {productPieData.map((_, index) => (
+                    {translatedProductPieData.map((_, index) => (
                       <Cell key={`cell-prod-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -277,7 +284,7 @@ export const AnalyticsPage: React.FC = () => {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-gray-400">No product data</div>
+              <div className="h-full flex items-center justify-center text-gray-400">{t['No product data']}</div>
             )}
           </div>
         </div>
@@ -287,12 +294,12 @@ export const AnalyticsPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Top Products */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="font-semibold text-gray-800 mb-6">Top Selling Products</h3>
+          <h3 className="font-semibold text-gray-800 mb-6">{t['Top Selling Products']}</h3>
           <div className="h-64 rounded-lg bg-gray-50 p-2">
-            {topProducts.length > 0 ? (
+            {translatedTopProducts.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={topProducts}
+                  data={translatedTopProducts}
                   layout="vertical"
                   margin={{ top: 5, right: 30, left: 40, bottom: 5 }}
                 >
@@ -314,17 +321,17 @@ export const AnalyticsPage: React.FC = () => {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-gray-400">No product data</div>
+              <div className="h-full flex items-center justify-center text-gray-400">{t['No product data']}</div>
             )}
           </div>
         </div>
 
         {/* Top Customers */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="font-semibold text-gray-800 mb-6">Top Customers</h3>
+          <h3 className="font-semibold text-gray-800 mb-6">{t['Top Customers']}</h3>
           <div className="space-y-4 max-h-64 overflow-y-auto pr-2">
             {topCustomers.length === 0 ? (
-              <div className="h-56 flex items-center justify-center text-gray-400 text-sm">No customer data yet</div>
+              <div className="h-56 flex items-center justify-center text-gray-400 text-sm">{t['No customer data yet']}</div>
             ) : (
               topCustomers.map((c, i) => (
                 <div key={i} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-100">
@@ -334,7 +341,7 @@ export const AnalyticsPage: React.FC = () => {
                     </div>
                     <div>
                       <div className="font-semibold text-gray-900 text-sm">{c.name}</div>
-                      <div className="text-xs text-gray-500">{c.orders} orders</div>
+                      <div className="text-xs text-gray-500">{c.orders} {t['orders']}</div>
                     </div>
                   </div>
                   <div className="font-bold text-gray-900 text-sm">₹{c.spend.toLocaleString()}</div>
