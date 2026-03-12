@@ -84,6 +84,8 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
             }
             const voiceCtx = await resolveCustomerVoiceContext(invoice.client_phone);
             
+            console.log(`[Voice Agent] Calling ${invoice.client_phone}, resolved language: ${voiceCtx.lang}`);
+            
             // Generate fully localized opening prompt (longer for better conversation)
             const localizedPrompt = getVoicePrompt(voiceCtx.lang, 'opening');
             
@@ -149,9 +151,12 @@ async function resolveCustomerVoiceContext(phone: string): Promise<{ lang: Voice
         .select('_id preferredVoiceLanguage preferredLanguage lockVoiceLanguage')
         .lean() as any;
 
+    console.log(`[Voice Agent] Customer found: ${customer?._id}, preferredVoiceLanguage: ${customer?.preferredVoiceLanguage}, preferredLanguage: ${customer?.preferredLanguage}`);
+
     if (!customer) return { lang: 'en', enableMenu: true };
 
     const preferred = normalizeLanguage(customer.preferredVoiceLanguage || customer.preferredLanguage || '');
+    console.log(`[Voice Agent] Normalized language: ${preferred}`);
     if (preferred && preferred !== 'en') {
         return { lang: preferred, enableMenu: false };
     }
