@@ -217,6 +217,7 @@ export const BillingPage: React.FC = () => {
     const [selectedCustomer, setSelectedCustomer] = useState<(Customer & LocalCustomer) | null>(null);
     const [isNewCustomer, setIsNewCustomer] = useState(false);
     const [khataInfo, setKhataInfo] = useState<KhataExplanation | null>(null);
+    const [customerVoiceLanguage, setCustomerVoiceLanguage] = useState<string>('en');
 
     // Global Search State
     const [globalResults, setGlobalResults] = useState<Customer[]>([]);
@@ -334,6 +335,9 @@ export const BillingPage: React.FC = () => {
                 ...localCustomer,
                 name: customerData.name || localCustomer?.name || 'Unnamed Customer'
             } as Customer & LocalCustomer);
+
+            // Set voice language from customer data
+            setCustomerVoiceLanguage((customerData as any).preferredVoiceLanguage || 'en');
 
             const status = await getKhataStatus(normalizedPhone, customerData.khataScore, customerData.khataLimit);
             setKhataInfo(status);
@@ -1021,6 +1025,39 @@ export const BillingPage: React.FC = () => {
                                     <div className="text-lg font-black font-mono">₹{selectedCustomer?.khataBalance || 0}</div>
                                 </div>
                             </div>
+
+                            {/* Voice Language Selection for Recovery Calls */}
+                            {paymentMethod === 'ledger' && (
+                                <div className="mb-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Phone className="text-blue-600" size={18} />
+                                            <span className="text-sm font-bold text-gray-700 dark:text-gray-300">Voice Call Language</span>
+                                        </div>
+                                        <select
+                                            value={customerVoiceLanguage}
+                                            onChange={async (e) => {
+                                                const newLang = e.target.value;
+                                                setCustomerVoiceLanguage(newLang);
+                                                if (selectedCustomer?.id) {
+                                                    try {
+                                                        await customerApi.update(String(selectedCustomer.id), { preferredVoiceLanguage: newLang });
+                                                        addToast('Voice language updated!', 'success');
+                                                    } catch (err) {
+                                                        console.error('Failed to update voice language', err);
+                                                    }
+                                                }
+                                            }}
+                                            className="px-3 py-1.5 rounded-lg border border-blue-300 dark:border-blue-600 bg-white dark:bg-gray-800 text-sm font-medium"
+                                        >
+                                            <option value="en">English</option>
+                                            <option value="hi">हिंदी (Hindi)</option>
+                                            <option value="te">తెలుగు (Telugu)</option>
+                                        </select>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">This language will be used for automated recovery calls</p>
+                                </div>
+                            )}
 
                             {khataInfo && (
                                 <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-primary-green/5 to-primary-green/20 border border-primary-green/20">
