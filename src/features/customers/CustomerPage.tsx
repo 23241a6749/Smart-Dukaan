@@ -185,7 +185,7 @@ export const CustomerPage: React.FC = () => {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-48">
       <div className="flex justify-between items-center mb-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 dark:text-white">Customer Network</h2>

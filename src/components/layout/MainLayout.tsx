@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Store, Users, Package, TrendingUp, CreditCard, Menu, X, Gift, BookOpen, LogOut, Phone, MessageCircle, FileText, Activity } from 'lucide-react';
+import { Store, Users, Package, TrendingUp, CreditCard, Menu, X, Gift, BookOpen, LogOut, Phone, MessageCircle, FileText, Activity, Landmark } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -41,6 +41,7 @@ export const MainLayout: React.FC = () => {
         { path: '/khata', label: translate('Khata'), icon: CreditCard },
         { path: '/records', label: translate('Records'), icon: BookOpen },
         { path: '/analytics', label: translate('Analytics'), icon: TrendingUp },
+        { path: '/gst', label: translate('GST & ITR'), icon: Landmark },
     ];
 
     return (

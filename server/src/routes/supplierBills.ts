@@ -3,6 +3,10 @@ import { Product } from '../models/Product.js';
 import { SupplierBill } from '../models/SupplierBill.js';
 import { auth } from '../middleware/auth.js';
 import * as fuzzball from 'fuzzball';
+import { GSTInvoice } from '../models/GSTInvoice.js';
+import { GSTLedger } from '../models/GSTLedger.js';
+import { calculateInvoice, RawItem } from '../services/gstCalculator.js';
+import { classifyProduct } from '../services/gstClassification.js';
 
 const router = express.Router();
 
@@ -139,6 +143,46 @@ router.post('/process', auth, async (req, res) => {
             date: new Date()
         });
         await newBill.save();
+
+        // ── RECORD GST INPUT ──
+        const gstRawItems: RawItem[] = await Promise.all(billItems.map(async (item) => {
+            const classification = await classifyProduct(item.productName);
+            return {
+                productId: String(results.find(r => r.input.productName === item.productName)?.match?._id || new mongoose.Types.ObjectId()),
+                name: item.productName,
+                hsnCode: classification.hsnCode,
+                gstRate: classification.gstRate,
+                quantity: item.quantity,
+                unitPrice: item.costPrice,
+                priceIncludesGST: true
+            };
+        }));
+
+        const gstTotals = calculateInvoice(gstRawItems);
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+
+        const gstInvoice = new GSTInvoice({
+            shopkeeperId: userId,
+            ...gstTotals,
+            invoiceType: 'purchase',
+            month,
+            year
+        });
+        await gstInvoice.save();
+
+        const gstLedger = new GSTLedger({
+            shopkeeperId: userId,
+            type: 'input',
+            gstInvoiceId: gstInvoice._id,
+            referenceId: newBill._id,
+            referenceType: 'SupplierBill',
+            ...gstTotals,
+            month,
+            year
+        });
+        await gstLedger.save();
 
         res.json({ success: true, results, billId: newBill._id });
 

@@ -147,4 +147,72 @@ export const whatsappApi = {
     convertOrderToBill: (id: string) => api.post(`/whatsapp/orders/${id}/convert-to-bill`, {}),
 };
 
+// ── GST & ITR API ────────────────────────────────────────────────────────────
+export interface GSTSummary {
+    month: number;
+    year: number;
+    totalSales: number;
+    totalOutputGST: number;
+    totalInputGST: number;
+    netGSTPayable: number;
+    outputCGST: number;
+    outputSGST: number;
+    inputCGST: number;
+    inputSGST: number;
+}
+
+export interface ITRSummary {
+    month: number;
+    year: number;
+    revenue: number;
+    revenueExGST: number;
+    purchaseCost: number;
+    grossProfit: number;
+    gstCollected: number;
+    gstPaid: number;
+    netGSTPayable: number;
+    estimatedTaxableIncome: number;
+    disclaimer: string;
+}
+
+export const gstApi = {
+    // Classify a product (uses DB cache then OpenAI)
+    classifyProduct: (name: string, productId?: string) =>
+        api.post('/gst/classify', { name, productId }),
+
+    // Bulk-classify all unclassified products
+    classifyAll: () =>
+        api.post('/gst/classify-all'),
+
+    // Preview GST calculation without persisting
+    calculate: (items: any[]) =>
+        api.post('/gst/calculate', { items }),
+
+    // Create a sale GST invoice (persists + ledger entry)
+    createSaleInvoice: (data: { items: any[]; customerId?: string; billId?: string }) =>
+        api.post('/gst/invoices', { ...data }),
+
+    // Create a purchase GST entry (supplier purchase)
+    createPurchaseEntry: (data: { items: any[]; supplierBillId?: string }) =>
+        api.post('/gst/purchases', { ...data }),
+
+    // List GST invoices
+    getInvoices: (params?: { type?: string; month?: number; year?: number }) =>
+        api.get('/gst/invoices', { params }),
+
+    // List GST ledger entries
+    getLedger: (params?: { type?: string; month?: number; year?: number }) =>
+        api.get('/gst/ledger', { params }),
+
+    // Monthly GST summary
+    getGSTSummary: (month: number, year: number) =>
+        api.get<GSTSummary>('/reports/gst-summary', { params: { month, year } }),
+
+    // Monthly ITR assistance summary
+    getITRSummary: (month: number, year: number) =>
+        api.get<ITRSummary>('/reports/itr-summary', { params: { month, year } }),
+};
+
+
 export default api;
+

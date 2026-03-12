@@ -242,7 +242,7 @@ export const SupplierBillPage: React.FC = () => {
     };
 
     return (
-        <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8 pb-40">
+        <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8 pb-48">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                     <div className="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-2xl text-blue-600 dark:text-blue-400">

@@ -81,7 +81,7 @@ export const ProductPage: React.FC = () => {
   const lowStockProducts = filteredProducts.filter(p => p.stock <= p.minStock);
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-20">
+    <div className="space-y-6 max-w-5xl mx-auto pb-48">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 dark:text-white">Shop Inventory</h2>

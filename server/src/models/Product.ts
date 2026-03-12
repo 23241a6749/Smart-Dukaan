@@ -9,6 +9,11 @@ const productSchema = new mongoose.Schema({
     category: { type: String },
     unit: { type: String },
     icon: { type: String },
+    // GST Classification (populated lazily on first sale / via /api/gst/classify)
+    normalizedName: { type: String },
+    hsnCode: { type: String },
+    gstRate: { type: Number },            // e.g. 0, 5, 12, 18, 28
 }, { timestamps: true });
 
 export const Product = mongoose.model('Product', productSchema);
+

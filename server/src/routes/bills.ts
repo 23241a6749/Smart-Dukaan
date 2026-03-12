@@ -11,6 +11,11 @@ import { OTP } from '../models/OTP.js';
 import { auth } from '../middleware/auth.js';
 import { recalculateGlobalKhataScore } from '../utils/khataScore.js';
 import twilio from 'twilio';
+import { GSTInvoice } from '../models/GSTInvoice.js';
+import { GSTInvoice } from '../models/GSTInvoice.js';
+import { GSTLedger } from '../models/GSTLedger.js';
+import { calculateInvoice, RawItem } from '../services/gstCalculator.js';
+import { classifyProduct } from '../services/gstClassification.js';
 
 const router = express.Router();
 const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
@@ -41,22 +46,43 @@ async function createBillInternal(session: mongoose.ClientSession, data: any, us
 
     let totalAmount = 0;
     const processedItems = [];
+    const gstRawItems: RawItem[] = [];
 
-    // 2. Validate Stock and Calculate Total
+    // 2. Validate Stock and Calculate Total + GST
     for (const item of items) {
         const product = await Product.findById(item.productId).session(session);
         if (!product) throw new Error(`Product ${item.productId} not found`);
         if (product.stock < item.quantity) throw new Error(`Insufficient stock for ${product.name}`);
 
         product.stock -= item.quantity;
+
+        // Auto-classify for GST if missing on product
+        if (product.get('gstRate') === undefined || product.get('hsnCode') === undefined) {
+            const classification = await classifyProduct(product.name);
+            product.set('gstRate', classification.gstRate);
+            product.set('hsnCode', classification.hsnCode);
+            product.set('normalizedName', classification.normalizedName);
+            product.set('category', classification.category);
+        }
         await product.save({ session });
 
         totalAmount += product.price * item.quantity;
+
         processedItems.push({
             productId: product._id,
             name: product.name,
             quantity: item.quantity,
             price: product.price
+        });
+
+        gstRawItems.push({
+            productId: product._id.toString(),
+            name: product.name,
+            hsnCode: (product.get('hsnCode') as string) || '0000',
+            gstRate: (product.get('gstRate') as number) || 0,
+            quantity: item.quantity,
+            unitPrice: product.price,
+            priceIncludesGST: true
         });
     }
 
@@ -70,7 +96,36 @@ async function createBillInternal(session: mongoose.ClientSession, data: any, us
     });
     await bill.save({ session });
 
-    // 4. Handle Ledger if applicable
+    // 4. Record GST Invoice & Ledger
+    const gstTotals = calculateInvoice(gstRawItems);
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    const gstInvoice = new GSTInvoice({
+        shopkeeperId: userId,
+        customerId: customer._id,
+        billId: bill._id,
+        ...gstTotals,
+        invoiceType: 'sale',
+        month,
+        year
+    });
+    await gstInvoice.save({ session });
+
+    const gstLedger = new GSTLedger({
+        shopkeeperId: userId,
+        type: 'output',
+        gstInvoiceId: gstInvoice._id,
+        referenceId: bill._id,
+        referenceType: 'Bill',
+        ...gstTotals,
+        month,
+        year
+    });
+    await gstLedger.save({ session });
+
+    // 5. Handle Ledger if applicable
     if (paymentType === 'ledger') {
         const ledgerEntry = new LedgerEntry({
             shopkeeperId: userId,
@@ -99,7 +154,6 @@ async function createBillInternal(session: mongoose.ClientSession, data: any, us
         await account.save({ session });
     }
 
-    // Recalculate Global Khata Score after any transaction (new debt or cash purchase)
     recalculateGlobalKhataScore(customer._id.toString()).catch(err => console.error('Score calculation error:', err));
 
     return bill;

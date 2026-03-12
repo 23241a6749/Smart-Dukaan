@@ -109,7 +109,7 @@ export const InventoryPage: React.FC = () => {
                             <Save size={24} /> Fast Fill Inventory
                         </button>
                     </div>
-                    <div className="space-y-3 pb-20">
+                    <div className="space-y-6 pb-48">
                         {products.map(product => (
                             <div key={product._id} className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center border border-gray-100">
                                 <div className="flex items-center gap-3">

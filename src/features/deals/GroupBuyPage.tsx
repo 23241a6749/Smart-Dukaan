@@ -190,7 +190,7 @@ export default function GroupBuyPage() {
     });
 
     return (
-        <div className="min-h-screen bg-[#F3F4F6] dark:bg-gray-900 relative p-4 pb-24">
+        <div className="min-h-screen bg-[#F3F4F6] dark:bg-gray-900 relative p-4 pb-48">
             {/* BACKGROUND MESH */}
             <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"

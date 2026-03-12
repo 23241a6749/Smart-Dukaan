@@ -89,7 +89,7 @@ export default function RecoveryPage() {
     const totalPending = (allCustomers?.filter((c: Customer) => c.khataBalance > 0) || []).reduce((sum: number, d: Customer) => sum + d.khataBalance, 0);
 
     return (
-        <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 pb-24 font-sans text-gray-900">
+        <div className="min-h-screen bg-[#F8F9FA] dark:bg-gray-900 pb-48 font-sans text-gray-900">
             {/* CLEAN HERO SECTION */}
             <div className="bg-white dark:bg-gray-800 pt-6 pb-8 px-6 rounded-b-3xl shadow-sm border-b border-gray-100 dark:border-gray-700">
                 {/* Top Row: Title + Status */}

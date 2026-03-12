@@ -600,7 +600,7 @@ export const BillingPage: React.FC = () => {
 
 
             {/* Product Grid */}
-            <div className="p-4 pb-32">
+            <div className="p-4 pb-48">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                     {products?.filter(p =>
                         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1343,3 +1343,4 @@ export const BillingPage: React.FC = () => {
         </div >
     );
 };
+

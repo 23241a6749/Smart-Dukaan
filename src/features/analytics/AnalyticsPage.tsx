@@ -129,7 +129,7 @@ export const AnalyticsPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-48">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
         <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg shadow-sm text-sm text-gray-600">

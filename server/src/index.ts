@@ -29,6 +29,9 @@ import { aiRouter } from './routes/ai.js';
 import { invoiceRouter } from './routes/invoices.js';
 import { invoiceWebhooksRouter } from './routes/invoiceWebhooks.js';
 import { startInvoiceScheduler } from './jobs/reminderScheduler.js';
+import { gstRouter } from './routes/gst.js';
+import { reportsRouter } from './routes/reports.js';
+
 
 const app = express();
 const httpServer = createServer(app);
@@ -72,6 +75,8 @@ app.use('/api/supplier-bills', supplierBillsRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/invoices', invoiceRouter);
 app.use('/api/invoices/webhook', invoiceWebhooksRouter);
+app.use('/api/gst', gstRouter);
+app.use('/api/reports', reportsRouter);
 
 io.on('connection', (socket) => {
     console.log('User connected to socket:', socket.id);
@@ -92,3 +97,4 @@ mongoose.connect(process.env.MONGODB_URI!)
     .catch((err) => {
         console.error('MongoDB connection error:', err);
     });
+

@@ -1,6 +1,7 @@
 import express from 'express';
 import { Product } from '../models/Product.js';
 import { auth } from '../middleware/auth.js';
+import { classifyProduct } from '../services/gstClassification.js';
 
 const router = express.Router();
 
@@ -16,14 +17,26 @@ router.get('/', auth, async (req, res) => {
 
 // Create product
 router.post('/', auth, async (req, res) => {
-    const product = new Product({ ...req.body, shopkeeperId: req.auth?.userId });
     try {
+        const { name } = req.body;
+        if (!name) return res.status(400).json({ message: 'Product name is required' });
+
+        // Auto-classify using AI/Cache
+        const classification = await classifyProduct(name);
+
+        const product = new Product({
+            ...req.body,
+            ...classification, // Enrich with hsnCode, gstRate, category, normalizedName
+            shopkeeperId: req.auth?.userId
+        });
+
         const newProduct = await product.save();
         res.status(201).json(newProduct);
     } catch (err: any) {
         res.status(400).json({ message: err.message });
     }
 });
+
 
 // Update product (e.g., manual stock adjustment)
 router.patch('/:id', auth, async (req, res) => {

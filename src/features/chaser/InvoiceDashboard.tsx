@@ -81,7 +81,7 @@ export default function InvoiceDashboard() {
     };
 
     const totalInvoices = invoices.length;
-    const activeRecoveries = invoices.filter(i => ['overdue', 'unpaid'].includes(i.status)).length;
+    const activeRecoveries = invoices.filter(i => ['overdue', 'unpaid', 'status'].includes(i.status)).length;
     const promisedCount = invoices.filter(i => i.status === 'promised').length;
     const disputedCount = invoices.filter(i => i.status === 'disputed').length;
     const recoveredInvoices = invoices.filter(i => i.status === 'paid').length;
@@ -96,7 +96,7 @@ export default function InvoiceDashboard() {
         .slice(0, 3);
 
     return (
-        <div className="min-h-screen pb-24 text-gray-900 dark:text-gray-100 flex flex-col gap-8">
+        <div className="min-h-screen pb-48 text-gray-900 dark:text-gray-100 flex flex-col gap-8">
             {/* Header Hero */}
             <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-emerald-700 via-teal-700 to-slate-900 p-8 shadow-2xl border border-white/10 shrink-0">
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
@@ -293,7 +293,6 @@ export default function InvoiceDashboard() {
                                                     </td>
                                                 </motion.tr>
 
-                                                {/* Expanded History Row */}
                                                 <AnimatePresence>
                                                     {isExpanded && (
                                                         <motion.tr

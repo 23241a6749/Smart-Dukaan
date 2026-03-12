@@ -371,7 +371,7 @@ export default function WhatsAppPage() {
         : `${filteredOrders.length} shown`;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 pb-48">
             <section className="relative overflow-hidden rounded-[2rem] border border-emerald-200/40 bg-gradient-to-br from-emerald-700 via-teal-700 to-slate-900 p-6 text-white shadow-2xl">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.16),transparent_28%)]" />
                 <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
