@@ -874,7 +874,7 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
     const MAX_CALL_TURNS = 3;
     if (callCount >= MAX_CALL_TURNS) {
         console.log('[Voice] Max call turns reached, ending call');
-        return res.send(buildHangupTwiml('Thank you for your time. We will follow up with you shortly. Goodbye.'));
+        return res.send(buildHangupTwiml('Thank you for your time. We will follow up with you shortly. Goodbye.', 'en'));
     }
 
     try {
@@ -890,6 +890,11 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
         if (from === voiceNum) {
             customerPhone = to;
         }
+
+        // Resolve customer language preference FIRST
+        const voiceLangCtx = await resolveVoiceLanguageContextByPhone(customerPhone);
+        const lang: VoiceLang = voiceLangCtx.lang;
+        console.log(`[Voice] Resolved language: ${lang} (source: ${voiceLangCtx.source})`);
 
         // If no speech detected, re-prompt with retry cap
         if (!speechResult) {
@@ -937,14 +942,19 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
             }
 
             console.log('[Voice] No speech detected, re-prompting...');
-            return res.send(buildGatherTwiml('Hello, I could not hear you clearly. Please tell me when you can pay your pending amount.', backendUrl, callCount));
+            return res.send(buildGatherTwiml(
+                getVoicePrompt(lang, 'noSpeechRetry'),
+                backendUrl,
+                callCount,
+                lang
+            ));
         }
 
         // Find invoice for this phone number
         const last10 = customerPhone.replace(/[^0-9]/g, '').slice(-10);
         if (!last10 || last10.length < 10) {
             console.log('[Voice] Invalid phone number, hanging up.');
-            return res.send(buildHangupTwiml('Sorry, I could not identify your account. Goodbye.'));
+            return res.send(buildHangupTwiml(getVoicePrompt(lang, 'noInvoice'), lang));
         }
 
         const invoice = await Invoice.findOne({
@@ -954,7 +964,7 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
 
         if (!invoice) {
             console.log(`[Voice] No active invoice for phone ...${last10}`);
-            return res.send(buildHangupTwiml('Thank you. We have no pending dues for you. Goodbye.'));
+            return res.send(buildHangupTwiml(getVoicePrompt(lang, 'noInvoice'), lang));
         }
 
         console.log(`[Voice] Found invoice ${invoice.invoice_id} for ${invoice.client_name}`);
@@ -1008,8 +1018,35 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
         const shouldEndByModel = aiReply.includes('END_CALL');
         aiReply = aiReply.replace(/END_CALL/g, '').trim();
 
-        const shouldEnd = shouldEndByModel || intent !== 'UNKNOWN' || finalConfidence < 0.4;
-        console.log(`[Voice] ${invoice.client_name}: "${speechResult}" -> AI: "${aiReply}" | Intent: ${intent} | Conf: ${finalConfidence.toFixed(2)} | End: ${shouldEnd}`);
+        const shouldEnd = shouldEndByModel || (intent !== 'UNKNOWN' && intent !== 'EXTENSION_REQUESTED') || finalConfidence < 0.4;
+        
+        // Get localized prompt based on conversation stage
+        let nextPrompt = '';
+        if (shouldEnd) {
+            if (intent === 'PAYMENT_PROMISED') {
+                nextPrompt = getVoicePrompt(lang, 'closurePromised', { promisedDateText: parsedDate ? formatDateForVoice(parsedDate, lang) : undefined });
+            } else if (intent === 'EXTENSION_REQUESTED') {
+                nextPrompt = getVoicePrompt(lang, 'closurePartial', { 
+                    partialAmount: invoice.amount * 0.5,
+                    promisedDateText: parsedDate ? formatDateForVoice(parsedDate, lang) : undefined 
+                });
+            } else if (intent === 'DISPUTE') {
+                nextPrompt = getVoicePrompt(lang, 'closureDispute');
+            } else {
+                nextPrompt = getVoicePrompt(lang, 'unableToUnderstand');
+            }
+        } else {
+            // Continue conversation - ask next question based on stage
+            if (intent === 'UNKNOWN' && finalConfidence < 0.5) {
+                nextPrompt = getVoicePrompt(lang, 'askPartialNow', { minimumPartial: Math.min(100, invoice.amount * 0.1) });
+            } else if (intent === 'EXTENSION_REQUESTED') {
+                nextPrompt = getVoicePrompt(lang, 'askRemainingDate', { remainingAmount: invoice.amount });
+            } else {
+                nextPrompt = getVoicePrompt(lang, 'askPartialNow', { minimumPartial: Math.min(100, invoice.amount * 0.1) });
+            }
+        }
+        
+        console.log(`[Voice] ${invoice.client_name}: "${speechResult}" -> AI: "${aiReply}" | Intent: ${intent} | Conf: ${finalConfidence.toFixed(2)} | Lang: ${lang} | End: ${shouldEnd}`);
 
         // Log conversation
         invoice.reminder_history.push({
@@ -1072,12 +1109,12 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
             }
 
             await invoice.save();
-            return res.send(buildHangupTwiml(aiReply));
+            return res.send(buildHangupTwiml(nextPrompt || aiReply, lang));
         }
 
         // Continue conversation
         await invoice.save();
-        return res.send(buildGatherTwiml(aiReply, backendUrl, callCount));
+        return res.send(buildGatherTwiml(nextPrompt || aiReply, backendUrl, callCount, lang));
 
     } catch (e) {
         console.error('[Voice] CRITICAL ERROR:', e);
