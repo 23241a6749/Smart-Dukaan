@@ -164,11 +164,10 @@ export const ExpiryWastePage: React.FC = () => {
     }
 
     return (
-        <div className="p-4 safe-area-bottom space-y-5">
+        <div className="p-4 safe-area-bottom space-y-5 pb-32">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h2 className="text-2xl font-black text-gray-900">Expiry & Waste Command Center</h2>
-                    <p className="text-sm text-gray-500">Protect margin by taking action before stock expires.</p>
                 </div>
                 <button
                     onClick={handleRefresh}

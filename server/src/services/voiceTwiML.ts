@@ -14,7 +14,20 @@ function sanitizeForTwiml(text: string): string {
 
 function voiceForLanguage(lang: VoiceLang): string {
     const explicit = process.env[`TWILIO_VOICE_${lang.toUpperCase()}` as keyof NodeJS.ProcessEnv];
-    return explicit || process.env.TWILIO_VOICE_DEFAULT || 'alice';
+    if (explicit) return explicit;
+    
+    const GOOGLE_STANDARD_VOICES: Record<VoiceLang, string> = {
+        en: 'Google.en-IN-Standard-A',
+        hi: 'Google.hi-IN-Standard-A',
+        te: 'Google.te-IN-Standard-A',
+        ta: 'Google.ta-IN-Standard-A',
+        mr: 'Google.mr-IN-Standard-A',
+        bn: 'Google.bn-IN-Standard-A',
+        ur: 'Google.ur-IN-Standard-A',
+        mixed: 'Google.en-IN-Standard-A',
+    };
+    
+    return GOOGLE_STANDARD_VOICES[lang] || 'Google.en-IN-Standard-A';
 }
 
 export function buildGatherTwimlLocalized(args: {
