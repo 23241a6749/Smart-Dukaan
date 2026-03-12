@@ -16,6 +16,172 @@ import { useTranslate } from '../../hooks/useTranslate';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5001';
 
+// --- Memoized Sub-components ---
+
+const BillingProductCard = React.memo(({ product, t, cartItem, addToCart, increaseQuantity, decreaseQuantity, addToast }: any) => {
+    const isOutOfStock = product.stock <= 0;
+    const inCart = !!cartItem;
+
+    return (
+        <div className={`bg-white dark:bg-gray-800 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col relative transition-all ${isOutOfStock ? 'opacity-40 grayscale-[0.5]' : 'hover:shadow-md'}`}>
+            {isOutOfStock && (
+                <div className="absolute top-2 right-2 bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter z-10">
+                    {t['Sold Out']}
+                </div>
+            )}
+
+            <div className="flex-1 flex flex-col items-center justify-center py-2">
+                <div className="text-4xl mb-2">{product.icon || '📦'}</div>
+                <span className="font-bold text-gray-900 dark:text-gray-100 leading-tight text-center text-sm mb-1 line-clamp-2">{product.name}</span>
+                <span className="text-primary-green font-bold text-sm">₹{product.price}/{product.unit}</span>
+                {product.stock <= product.minStock && product.stock > 0 && (
+                    <span className="text-[10px] text-orange-500 font-semibold mt-1">{t['Only']} {product.stock} {t['left']}</span>
+                )}
+            </div>
+
+            {!isOutOfStock && (
+                <div className="mt-2">
+                    {!inCart ? (
+                        <button
+                            onClick={() => {
+                                const success = addToCart(product, product.stock);
+                                if (!success) addToast(`${t['Only']} ${product.stock} ${product.unit} ${t['available']}`, 'warning');
+                            }}
+                            className="w-full bg-white dark:bg-gray-700 border-2 border-primary-green text-primary-green font-black text-sm py-2 rounded-lg hover:bg-primary-green hover:text-white transition-all active:scale-95"
+                        >
+                            {t['ADD']}
+                        </button>
+                    ) : (
+                        <div className="flex items-center justify-between bg-primary-green rounded-lg overflow-hidden">
+                            <button
+                                onClick={() => decreaseQuantity(product._id!)}
+                                className="w-10 h-9 flex items-center justify-center text-white font-black text-lg hover:bg-emerald-600 transition-colors active:scale-90"
+                            >
+                                <Minus size={16} />
+                            </button>
+                            <div className="flex-1 text-center">
+                                <span className="text-white font-black text-sm">{cartItem.quantity}</span>
+                                <span className="text-white/70 text-[10px] ml-1">{product.unit}</span>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    const success = increaseQuantity(product._id!, product.stock);
+                                    if (!success) addToast(`${t['Only']} ${product.stock} ${product.unit} ${t['available']}`, 'warning');
+                                }}
+                                className="w-10 h-9 flex items-center justify-center text-white font-black text-lg hover:bg-emerald-600 transition-colors active:scale-90"
+                            >
+                                <Plus size={16} />
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {isOutOfStock && (
+                <div className="absolute inset-0 bg-white/10 dark:bg-black/10 flex items-center justify-center rounded-2xl">
+                    <div className="bg-red-600 text-white text-[10px] font-black px-3 py-1 rounded-lg rotate-[-15deg] shadow-lg ring-2 ring-white">{t['OUT OF STOCK']}</div>
+                </div>
+            )}
+        </div>
+    );
+});
+
+const CheckoutCartItem = React.memo(({ item, t, increaseQuantity, decreaseQuantity, updateQuantity, removeFromCart, addToast }: any) => (
+    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="flex justify-between items-start mb-3">
+            <div>
+                <div className="font-bold text-gray-900 dark:text-white text-lg">{item.name}</div>
+                <div className="text-gray-500 dark:text-gray-400 text-sm">₹{item.price}/{item.unit}</div>
+            </div>
+            <div className="font-bold text-lg text-gray-900 dark:text-white">₹{item.price * item.quantity}</div>
+        </div>
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 bg-gray-100 dark:bg-gray-700 rounded-lg p-1 pr-3">
+                <div className="flex items-center">
+                    <button onClick={() => decreaseQuantity(item._id!)} className="w-8 h-8 bg-white dark:bg-gray-600 rounded-md flex items-center justify-center text-gray-700 dark:text-white"><Minus size={16} /></button>
+                    <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            const success = updateQuantity(item._id!, val, item.stock);
+                            if (!success) addToast(`${t['Only']} ${item.stock} ${item.unit} ${t['available']}`, 'warning');
+                        }}
+                        className="w-16 bg-transparent text-center font-bold text-gray-900 dark:text-white border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button onClick={() => {
+                        const success = increaseQuantity(item._id!, item.stock);
+                        if (!success) addToast(`${t['Only']} ${item.stock} ${item.unit} ${t['available']}`, 'warning');
+                    }} className="w-8 h-8 bg-white dark:bg-gray-600 rounded-md flex items-center justify-center text-gray-700 dark:text-white"><Plus size={16} /></button>
+                </div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.unit}</span>
+            </div>
+            <button onClick={() => removeFromCart(item._id!)} className="text-danger-red p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><Trash2 size={18} /></button>
+        </div>
+    </div>
+));
+
+const CustomerSuggestionRow = React.memo(({ cust, t, identifyCustomer, isGlobal }: any) => (
+    <button
+        onClick={() => identifyCustomer(cust)}
+        className={`w-full flex items-center justify-between p-4 ${isGlobal ? 'bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30' : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700'} rounded-2xl hover:shadow-md transition-all group`}
+    >
+        <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 ${isGlobal ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'} rounded-xl flex items-center justify-center font-bold uppercase`}>
+                {cust.name?.[0] || 'C'}
+            </div>
+            <div className="text-left">
+                <div className="flex items-center gap-2">
+                    <div className="font-black text-gray-900 dark:text-white">{cust.name || t['Unnamed Customer']}</div>
+                    {isGlobal && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold px-2 py-0.5 rounded-full">GLOBAL</span>}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 font-bold">{cust.phoneNumber}</div>
+            </div>
+        </div>
+        <ChevronRight className={`${isGlobal ? 'text-blue-300 group-hover:text-blue-500' : 'text-gray-300 group-hover:text-primary-green'}`} />
+    </button>
+));
+
+const PaymentOptionLabel = React.memo(({ value, currentMethod, onChange, t, title, description, disabled, cartTotal, khataInfo }: any) => (
+    <label
+        className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all relative ${currentMethod === value
+            ? 'border-primary-green bg-green-50 dark:bg-green-900/10'
+            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+    >
+        <div className="flex items-center gap-3">
+            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${currentMethod === value
+                ? 'border-primary-green bg-primary-green'
+                : 'border-gray-300 dark:border-gray-600'
+                }`}>
+                {currentMethod === value && (
+                    <div className="w-2.5 h-2.5 bg-white rounded-full"></div>
+                )}
+            </div>
+            <div>
+                <div className="font-semibold text-gray-900 dark:text-white">{t[title] || title}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {value === 'ledger' && khataInfo ? `₹${khataInfo.availableCredit} ${t['available']}` : t[description] || description}
+                </div>
+            </div>
+        </div>
+        <input
+            type="radio"
+            name="payment"
+            value={value}
+            checked={currentMethod === value}
+            onChange={() => onChange(value)}
+            disabled={disabled}
+            className="sr-only"
+        />
+        {value === 'ledger' && disabled && (
+            <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                {t['Limit Exceeded']}
+            </div>
+        )}
+    </label>
+));
+
 export const BillingPage: React.FC = () => {
     const { cart, addToCart, increaseQuantity, decreaseQuantity, updateQuantity, removeFromCart, clearCart, cartTotal } = useCart();
     const { t } = useLanguage();
@@ -56,23 +222,26 @@ export const BillingPage: React.FC = () => {
     const [globalResults, setGlobalResults] = useState<Customer[]>([]);
     const [isGlobalLoading, setIsGlobalLoading] = useState(false);
 
-    const loadCustomers = async () => {
+    const [globalResults, setGlobalResults] = useState<Customer[]>([]);
+    const [isGlobalLoading, setIsGlobalLoading] = useState(false);
+
+    const loadCustomers = React.useCallback(async () => {
         try {
             const response = await customerApi.getAll();
             setAllCustomers(response.data);
         } catch (err) {
             console.error('Failed to load customers', err);
         }
-    };
+    }, []);
 
-    const loadProducts = async () => {
+    const loadProducts = React.useCallback(async () => {
         try {
             const response = await productApi.getAll();
             setProducts(response.data);
         } catch (err) {
             console.error('Failed to load products', err);
         }
-    };
+    }, []);
 
     useEffect(() => {
         loadProducts();
@@ -82,19 +251,16 @@ export const BillingPage: React.FC = () => {
         const socket = io(SOCKET_URL);
         socket.on('payment-success', async (data) => {
             console.log('Payment success received via socket:', data);
-            // With checkout, payment is verified locally, but webhook can trigger this
-            // We can add logic here if we were using a disconnected QR code.
         });
 
         return () => {
             socket.disconnect();
         };
-    }, [selectedCustomer, cart, cartTotal]);
+    }, [loadProducts, loadCustomers]);
 
     // Effect: Global Search
     useEffect(() => {
         const fetchGlobal = async () => {
-            // Reset if input is short
             if (!customerInput || customerInput.length < 3) {
                 setGlobalResults([]);
                 return;
@@ -103,7 +269,6 @@ export const BillingPage: React.FC = () => {
             setIsGlobalLoading(true);
             try {
                 const res = await customerApi.search(customerInput);
-                // Filter out results that are already in the local shop (to avoid duplicates in UI)
                 const localIds = new Set(allCustomers.map(c => c._id));
                 const uniqueGlobal = res.data.filter((c: any) => !localIds.has(c._id));
                 setGlobalResults(uniqueGlobal);
@@ -115,18 +280,18 @@ export const BillingPage: React.FC = () => {
             }
         };
 
-        const timer = setTimeout(fetchGlobal, 400); // 400ms debounce
+        const timer = setTimeout(fetchGlobal, 400);
         return () => clearTimeout(timer);
     }, [customerInput, allCustomers]);
 
 
-    const getLedgerColor = (balance: number) => {
+    const getLedgerColor = React.useCallback((balance: number) => {
         if (balance <= 500) return 'text-green-600 bg-green-50 border-green-200';
         if (balance <= 1500) return 'text-yellow-600 bg-yellow-50 border-yellow-200';
         return 'text-red-600 bg-red-50 border-red-200';
-    };
+    }, []);
 
-    const identifyCustomer = async (cust?: Customer) => {
+    const identifyCustomer = React.useCallback(async (cust?: Customer) => {
         const phone = cust ? cust.phoneNumber : phoneNumber;
         const name = cust ? cust.name : customerName;
 
@@ -141,7 +306,6 @@ export const BillingPage: React.FC = () => {
             const response = await customerApi.create({ phoneNumber: normalizedPhone, name });
             const customerData = response.data;
 
-            // Sync with local Dexie DB for Khata Scoring
             let localCustomer = await db.customers.where('phoneNumber').equals(normalizedPhone).first();
             if (!localCustomer) {
                 const globalScore = customerData.khataScore || SCORE_DEFAULT;
@@ -160,7 +324,6 @@ export const BillingPage: React.FC = () => {
                 });
                 localCustomer = await db.customers.get(newLocalId);
             } else {
-                // Update local customer with global data if it already exists
                 await db.customers.update(localCustomer.id!, {
                     khataScore: customerData.khataScore || localCustomer.khataScore,
                     khataLimit: customerData.khataLimit || localCustomer.khataLimit,
@@ -175,29 +338,32 @@ export const BillingPage: React.FC = () => {
                 name: customerData.name || localCustomer?.name || 'Unnamed Customer'
             } as Customer & LocalCustomer);
 
-            // Get detailed Khata status (passing global score if available)
             const status = await getKhataStatus(normalizedPhone, customerData.khataScore, customerData.khataLimit);
             setKhataInfo(status);
 
             setCheckoutStep('PAYMENT');
             addToast(response.status === 201 ? t['New customer created'] : t['Customer identified'], 'success');
-            loadCustomers(); // Refresh list
+            loadCustomers();
         } catch (e: any) {
             console.error(e);
             addToast(t['Error identifying customer'] || 'Error identifying customer', 'error');
         }
-    };
+    }, [phoneNumber, customerName, t, addToast, loadCustomers]);
 
-    const filteredCustomers = allCustomers.filter(c =>
+    const filteredCustomers = React.useMemo(() => allCustomers.filter(c =>
         (c.name?.toLowerCase().includes(customerInput.toLowerCase()) ||
             c.phoneNumber.includes(customerInput)) && customerInput.length > 0
-    );
+    ), [allCustomers, customerInput]);
 
-    const processTransaction = async (method: 'cash' | 'online' | 'ledger') => {
+    const filteredProducts = React.useMemo(() => translatedProducts?.filter(p =>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))
+    ), [translatedProducts, searchTerm]);
+
+    const processTransaction = React.useCallback(async (method: 'cash' | 'online' | 'ledger') => {
         if (!selectedCustomer) return false;
 
         try {
-            // 1. Server Call
             const billRes = await billApi.create({
                 customerPhoneNumber: selectedCustomer.phoneNumber,
                 items: cart.map(i => ({ productId: i._id!, quantity: i.quantity, price: i.price })),
@@ -205,7 +371,6 @@ export const BillingPage: React.FC = () => {
             });
             setLatestBillId(billRes.data?._id || null);
 
-            // 2. Local Dexie Sync & Scroring Logic
             if (method === 'ledger') {
                 const customer = await db.customers.where('phoneNumber').equals(selectedCustomer.phoneNumber).first();
                 if (customer) {
@@ -216,7 +381,6 @@ export const BillingPage: React.FC = () => {
                         khataTransactions: (customer.khataTransactions || 0) + 1
                     });
 
-                    // Add to local ledger for score calculation
                     await db.ledger.add({
                         customerId: selectedCustomer.phoneNumber,
                         amount: cartTotal,
@@ -227,11 +391,9 @@ export const BillingPage: React.FC = () => {
                         items: cart
                     });
 
-                    // Recalculate score
                     await recalculateKhataScore(selectedCustomer.phoneNumber);
                 }
             } else {
-                // For cash/online, just record it locally too
                 await db.ledger.add({
                     customerId: selectedCustomer.phoneNumber,
                     amount: cartTotal,
@@ -243,7 +405,6 @@ export const BillingPage: React.FC = () => {
                     items: cart
                 });
 
-                // Consistency check might still benefit from seeing any activity
                 const customer = await db.customers.where('phoneNumber').equals(selectedCustomer.phoneNumber).first();
                 if (customer) {
                     await db.customers.update(customer.id!, {
@@ -260,9 +421,9 @@ export const BillingPage: React.FC = () => {
             addToast(e.response?.data?.message || t['Transaction Failed'] || 'Transaction Failed', 'error');
             return false;
         }
-    };
+    }, [selectedCustomer, cart, cartTotal, t, addToast, loadProducts]);
 
-    const handleCashPayment = async () => {
+    const handleCashPayment = React.useCallback(async () => {
         setAnimationType('cash');
         setShowStatusModal(true);
         setIsProcessing(true);
@@ -273,9 +434,9 @@ export const BillingPage: React.FC = () => {
         } else {
             setShowStatusModal(false);
         }
-    };
+    }, [processTransaction]);
 
-    const handleUpiPayment = async () => {
+    const handleUpiPayment = React.useCallback(async () => {
         if (!selectedCustomer) return;
 
         setIsProcessing(true);
@@ -365,10 +526,9 @@ export const BillingPage: React.FC = () => {
             setShowStatusModal(false);
             setIsProcessing(false);
         }
-    };
+    }, [selectedCustomer, cartTotal, cart, t, addToast, loadProducts]);
 
-    const handleLedgePayment = async () => {
-        // Enforcement Rule: Check available limit
+    const handleLedgePayment = React.useCallback(async () => {
         if (khataInfo && cartTotal > khataInfo.availableCredit) {
             addToast(`${t['Credit Limit Exceeded!']} ${t['Available']}: ₹${khataInfo.availableCredit}`, 'error');
             return;
@@ -386,7 +546,6 @@ export const BillingPage: React.FC = () => {
             const res = await billApi.sendKhataOtp(selectedCustomer.phoneNumber);
             addToast(t['Verification code sent to customer'], 'success');
 
-            // DEMO MODE: Auto-fill and show the OTP if Twilio is delayed or fails
             if (res.data?.demoOtp) {
                 setOtp(res.data.demoOtp);
                 addToast(`[DEMO] OTP auto-filled: ${res.data.demoOtp}`, 'info');
@@ -399,9 +558,9 @@ export const BillingPage: React.FC = () => {
         } finally {
             setOtpLoading(false);
         }
-    };
+    }, [khataInfo, cartTotal, selectedCustomer, t, addToast]);
 
-    const handleVerifyOtp = async () => {
+    const handleVerifyOtp = React.useCallback(async () => {
         if (!selectedCustomer || otp.length !== 6) return;
 
         setOtpLoading(true);
@@ -418,8 +577,6 @@ export const BillingPage: React.FC = () => {
             });
             setLatestBillId(verifyOtpRes.data?._id || null);
 
-            // If OTP verification succeeds, the bill is created.
-            // We need to sync local DB as well (ledger logic)
             const customer = await db.customers.where('phoneNumber').equals(selectedCustomer.phoneNumber).first();
             if (customer) {
                 const newActiveAmount = (customer.activeKhataAmount || 0) + cartTotal;
@@ -457,18 +614,16 @@ export const BillingPage: React.FC = () => {
             setOtpLoading(false);
             setOtp('');
         }
-    };
+    }, [selectedCustomer, otp, cart, cartTotal, t, addToast, loadProducts]);
 
-    const generateBillPDF = () => {
+    const generateBillPDF = React.useCallback(() => {
         const doc = new jsPDF();
 
-        // 1. Header
         doc.setFontSize(20);
         doc.setTextColor(40, 167, 69); // Green color
         doc.text(`SDukaan - ${t['Retail Invoice'] || 'Retail Invoice'}`, 105, 15, { align: "center" });
         doc.setTextColor(0, 0, 0); // Black
 
-        // 2. Metadata
         doc.setFontSize(10);
         const dateStr = new Date().toLocaleString();
 
@@ -479,7 +634,6 @@ export const BillingPage: React.FC = () => {
             doc.text(`${t['Payment Method'] || 'Payment Mode'}: ${paymentMethod.toUpperCase()}`, 14, 40);
         }
 
-        // 3. Table
         const tableData = cart.map(item => [
             item.name,
             `${item.quantity} ${item.unit}`,
@@ -496,7 +650,6 @@ export const BillingPage: React.FC = () => {
             headStyles: { fillColor: [40, 167, 69] },
         });
 
-        // 4. Footer
         const finalY = (doc as any).lastAutoTable.finalY + 10;
         doc.setFontSize(10);
         doc.text(t['Thank you for shopping!'] || "Thank you for shopping with SDukaan!", 105, finalY, { align: "center" });
@@ -505,9 +658,9 @@ export const BillingPage: React.FC = () => {
         doc.text(`${t['Powered by'] || 'Powered by'} 4Bytes`, 105, finalY + 5, { align: "center" });
 
         return doc;
-    };
+    }, [t, selectedCustomer, paymentMethod, cart, cartTotal]);
 
-    const handleDownloadPDF = () => {
+    const handleDownloadPDF = React.useCallback(() => {
         try {
             const doc = generateBillPDF();
             doc.save(`Invoice_${Date.now()}.pdf`);
@@ -516,9 +669,9 @@ export const BillingPage: React.FC = () => {
             console.error(err);
             addToast(t['Failed to download invoice'] || 'Failed to download invoice', 'error');
         }
-    };
+    }, [generateBillPDF, t, addToast]);
 
-    const handleSharePDF = async () => {
+    const handleSharePDF = React.useCallback(async () => {
         try {
             const doc = generateBillPDF();
             const pdfBlob = doc.output('blob');
@@ -532,25 +685,23 @@ export const BillingPage: React.FC = () => {
                 });
                 addToast(t['Invoice Shared Successfully'], 'success');
             } else {
-                // Fallback: Just download it
                 handleDownloadPDF();
                 addToast('Sharing not supported on this device, downloading instead.', 'info');
             }
         } catch (err) {
             console.error('Share failed', err);
-            // Don't show error if user cancelled share
             if ((err as any).name !== 'AbortError') {
                 addToast('Failed to share invoice', 'error');
             }
         }
-    };
+    }, [generateBillPDF, t, cartTotal, addToast, handleDownloadPDF]);
 
-    const handleTransactionComplete = () => {
+    const handleTransactionComplete = React.useCallback(() => {
         clearCart();
         closeCheckout();
-    };
+    }, [clearCart]);
 
-    const handleSendBillOnWhatsApp = async () => {
+    const handleSendBillOnWhatsApp = React.useCallback(async () => {
         if (!latestBillId) {
             addToast('Bill not available to send', 'error');
             return;
@@ -565,9 +716,9 @@ export const BillingPage: React.FC = () => {
         } finally {
             setSendingBillWhatsApp(false);
         }
-    };
+    }, [latestBillId, t, addToast]);
 
-    const closeCheckout = () => {
+    const closeCheckout = React.useCallback(() => {
         setShowCheckout(false);
         setCheckoutStep('SUMMARY');
         setPaymentMethod(null);
@@ -582,7 +733,7 @@ export const BillingPage: React.FC = () => {
         setShowOtpInput(false);
         setLatestBillId(null);
         setSendingBillWhatsApp(false);
-    };
+    }, []);
 
     return (
         <div className="flex flex-col relative bg-gray-50 dark:bg-gray-900 min-h-full">
@@ -607,80 +758,18 @@ export const BillingPage: React.FC = () => {
             {/* Product Grid */}
             <div className="p-4 pb-48">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                    {translatedProducts?.filter(p =>
-                        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        (p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))
-                    ).map(product => {
-                        const isOutOfStock = product.stock <= 0;
-                        const cartItem = cart.find(item => item._id === product._id);
-                        const inCart = !!cartItem;
-
-                        return (
-                            <div
-                                key={product._id}
-                                className={`bg-white dark:bg-gray-800 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col relative transition-all ${isOutOfStock ? 'opacity-40 grayscale-[0.5]' : 'hover:shadow-md'}`}
-                            >
-                                {isOutOfStock && (
-                                    <div className="absolute top-2 right-2 bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter z-10">
-                                        {t['Sold Out']}
-                                    </div>
-                                )}
-
-                                <div className="flex-1 flex flex-col items-center justify-center py-2">
-                                    <div className="text-4xl mb-2">{product.icon || '📦'}</div>
-                                    <span className="font-bold text-gray-900 dark:text-gray-100 leading-tight text-center text-sm mb-1 line-clamp-2">{product.name}</span>
-                                    <span className="text-primary-green font-bold text-sm">₹{product.price}/{product.unit}</span>
-                                    {product.stock <= product.minStock && product.stock > 0 && (
-                                        <span className="text-[10px] text-orange-500 font-semibold mt-1">{t['Only']} {product.stock} {t['left']}</span>
-                                    )}
-                                </div>
-
-                                {!isOutOfStock && (
-                                    <div className="mt-2">
-                                        {!inCart ? (
-                                            <button
-                                                onClick={() => {
-                                                    const success = addToCart(product, product.stock);
-                                                    if (!success) addToast(`${t['Only']} ${product.stock} ${product.unit} ${t['available']}`, 'warning');
-                                                }}
-                                                className="w-full bg-white dark:bg-gray-700 border-2 border-primary-green text-primary-green font-black text-sm py-2 rounded-lg hover:bg-primary-green hover:text-white transition-all active:scale-95"
-                                            >
-                                                {t['ADD']}
-                                            </button>
-                                        ) : (
-                                            <div className="flex items-center justify-between bg-primary-green rounded-lg overflow-hidden">
-                                                <button
-                                                    onClick={() => decreaseQuantity(product._id!)}
-                                                    className="w-10 h-9 flex items-center justify-center text-white font-black text-lg hover:bg-emerald-600 transition-colors active:scale-90"
-                                                >
-                                                    <Minus size={16} />
-                                                </button>
-                                                <div className="flex-1 text-center">
-                                                    <span className="text-white font-black text-sm">{cartItem.quantity}</span>
-                                                    <span className="text-white/70 text-[10px] ml-1">{product.unit}</span>
-                                                </div>
-                                                <button
-                                                    onClick={() => {
-                                                        const success = increaseQuantity(product._id!, product.stock);
-                                                        if (!success) addToast(`${t['Only']} ${product.stock} ${product.unit} ${t['available']}`, 'warning');
-                                                    }}
-                                                    className="w-10 h-9 flex items-center justify-center text-white font-black text-lg hover:bg-emerald-600 transition-colors active:scale-90"
-                                                >
-                                                    <Plus size={16} />
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {isOutOfStock && (
-                                    <div className="absolute inset-0 bg-white/10 dark:bg-black/10 flex items-center justify-center rounded-2xl">
-                                        <div className="bg-red-600 text-white text-[10px] font-black px-3 py-1 rounded-lg rotate-[-15deg] shadow-lg ring-2 ring-white">{t['OUT OF STOCK']}</div>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
+                    {filteredProducts?.map(product => (
+                        <BillingProductCard
+                            key={product._id}
+                            product={product}
+                            t={t}
+                            cartItem={cart.find(item => item._id === product._id)}
+                            addToCart={addToCart}
+                            increaseQuantity={increaseQuantity}
+                            decreaseQuantity={decreaseQuantity}
+                            addToast={addToast}
+                        />
+                    ))}
                 </div>
             </div>
 
@@ -773,38 +862,16 @@ export const BillingPage: React.FC = () => {
                         <div className="flex-1 flex flex-col overflow-hidden">
                             <div className="flex-1 overflow-y-auto p-4 space-y-3">
                                 {translatedCart.map(item => (
-                                    <div key={item._id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div>
-                                                <div className="font-bold text-gray-900 dark:text-white text-lg">{item.name}</div>
-                                                <div className="text-gray-500 dark:text-gray-400 text-sm">₹{item.price}/{item.unit}</div>
-                                            </div>
-                                            <div className="font-bold text-lg text-gray-900 dark:text-white">₹{item.price * item.quantity}</div>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-3 bg-gray-100 dark:bg-gray-700 rounded-lg p-1 pr-3">
-                                                <div className="flex items-center">
-                                                    <button onClick={() => decreaseQuantity(item._id!)} className="w-8 h-8 bg-white dark:bg-gray-600 rounded-md flex items-center justify-center text-gray-700 dark:text-white"><Minus size={16} /></button>
-                                                    <input
-                                                        type="number"
-                                                        value={item.quantity}
-                                                        onChange={(e) => {
-                                                            const val = parseFloat(e.target.value) || 0;
-                                                            const success = updateQuantity(item._id!, val, item.stock);
-                                                            if (!success) addToast(`${t['Only']} ${item.stock} ${item.unit} ${t['available']}`, 'warning');
-                                                        }}
-                                                        className="w-16 bg-transparent text-center font-bold text-gray-900 dark:text-white border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                    />
-                                                    <button onClick={() => {
-                                                        const success = increaseQuantity(item._id!, item.stock);
-                                                        if (!success) addToast(`${t['Only']} ${item.stock} ${item.unit} ${t['available']}`, 'warning');
-                                                    }} className="w-8 h-8 bg-white dark:bg-gray-600 rounded-md flex items-center justify-center text-gray-700 dark:text-white"><Plus size={16} /></button>
-                                                </div>
-                                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.unit}</span>
-                                            </div>
-                                            <button onClick={() => removeFromCart(item._id!)} className="text-danger-red p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><Trash2 size={18} /></button>
-                                        </div>
-                                    </div>
+                                    <CheckoutCartItem
+                                        key={item._id}
+                                        item={item}
+                                        t={t}
+                                        increaseQuantity={increaseQuantity}
+                                        decreaseQuantity={decreaseQuantity}
+                                        updateQuantity={updateQuantity}
+                                        removeFromCart={removeFromCart}
+                                        addToast={addToast}
+                                    />
                                 ))}
                             </div>
                             <div className="p-4 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 shadow-lg">
@@ -847,45 +914,24 @@ export const BillingPage: React.FC = () => {
                                     <div className="space-y-2">
                                         {/* Display Local Matches First */}
                                         {filteredCustomers.map(cust => (
-                                            <button
+                                            <CustomerSuggestionRow
                                                 key={cust._id}
-                                                onClick={() => identifyCustomer(cust)}
-                                                className="w-full flex items-center justify-between p-4 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl hover:border-primary-green hover:shadow-md transition-all group"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center font-bold text-gray-500 uppercase">
-                                                        {cust.name?.[0] || 'C'}
-                                                    </div>
-                                                    <div className="text-left">
-                                                        <div className="font-black text-gray-900 dark:text-white">{cust.name || t['Unnamed Customer']}</div>
-                                                        <div className="text-xs text-gray-500 dark:text-gray-400 font-bold">{cust.phoneNumber}</div>
-                                                    </div>
-                                                </div>
-                                                <ChevronRight className="text-gray-300 group-hover:text-primary-green" />
-                                            </button>
+                                                cust={cust}
+                                                t={t}
+                                                identifyCustomer={identifyCustomer}
+                                                isGlobal={false}
+                                            />
                                         ))}
 
                                         {/* Display Global Matches */}
                                         {globalResults.map(cust => (
-                                            <button
+                                            <CustomerSuggestionRow
                                                 key={cust._id}
-                                                onClick={() => identifyCustomer(cust)}
-                                                className="w-full flex items-center justify-between p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-2xl hover:border-blue-400 hover:shadow-md transition-all group"
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center font-bold text-blue-600 dark:text-blue-400 uppercase">
-                                                        {cust.name?.[0] || 'C'}
-                                                    </div>
-                                                    <div className="text-left">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="font-black text-gray-900 dark:text-white">{cust.name || 'Unnamed Customer'}</div>
-                                                            <span className="text-[10px] bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold px-2 py-0.5 rounded-full">GLOBAL</span>
-                                                        </div>
-                                                        <div className="text-xs text-gray-500 dark:text-gray-400 font-bold">{cust.phoneNumber}</div>
-                                                    </div>
-                                                </div>
-                                                <ChevronRight className="text-blue-300 group-hover:text-blue-500" />
-                                            </button>
+                                                cust={cust}
+                                                t={t}
+                                                identifyCustomer={identifyCustomer}
+                                                isGlobal={true}
+                                            />
                                         ))}
 
                                         {isGlobalLoading && (
@@ -1015,106 +1061,33 @@ export const BillingPage: React.FC = () => {
                                 <div>
                                     <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">{t['Select Payment Method']}</h3>
                                     <div className="space-y-3">
-                                        {/* Cash */}
-                                        <label
-                                            className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${paymentMethod === 'cash'
-                                                ? 'border-primary-green bg-green-50 dark:bg-green-900/10'
-                                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${paymentMethod === 'cash'
-                                                    ? 'border-primary-green bg-primary-green'
-                                                    : 'border-gray-300 dark:border-gray-600'
-                                                    }`}>
-                                                    {paymentMethod === 'cash' && (
-                                                        <div className="w-2.5 h-2.5 bg-white rounded-full"></div>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <div className="font-semibold text-gray-900 dark:text-white">{t['Cash']}</div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400">{t['Pay with physical currency']}</div>
-                                                </div>
-                                            </div>
-                                            <input
-                                                type="radio"
-                                                name="payment"
-                                                value="cash"
-                                                checked={paymentMethod === 'cash'}
-                                                onChange={() => setPaymentMethod('cash')}
-                                                className="sr-only"
-                                            />
-                                        </label>
-
-                                        {/* UPI/Online */}
-                                        <label
-                                            className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${paymentMethod === 'online'
-                                                ? 'border-primary-green bg-green-50 dark:bg-green-900/10'
-                                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${paymentMethod === 'online'
-                                                    ? 'border-primary-green bg-primary-green'
-                                                    : 'border-gray-300 dark:border-gray-600'
-                                                    }`}>
-                                                    {paymentMethod === 'online' && (
-                                                        <div className="w-2.5 h-2.5 bg-white rounded-full"></div>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <div className="font-semibold text-gray-900 dark:text-white">{t['UPI / Online']}</div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400">{t['PhonePe, GPay, Paytm']}</div>
-                                                </div>
-                                            </div>
-                                            <input
-                                                type="radio"
-                                                name="payment"
-                                                value="online"
-                                                checked={paymentMethod === 'online'}
-                                                onChange={() => setPaymentMethod('online')}
-                                                className="sr-only"
-                                            />
-                                        </label>
-
-                                        {/* Khata/Credit */}
-                                        <label
-                                            className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all relative ${paymentMethod === 'ledger'
-                                                ? 'border-primary-green bg-green-50 dark:bg-green-900/10'
-                                                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                                                } ${khataInfo && cartTotal > khataInfo.availableCredit ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${paymentMethod === 'ledger'
-                                                    ? 'border-primary-green bg-primary-green'
-                                                    : 'border-gray-300 dark:border-gray-600'
-                                                    }`}>
-                                                    {paymentMethod === 'ledger' && (
-                                                        <div className="w-2.5 h-2.5 bg-white rounded-full"></div>
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <div className="font-semibold text-gray-900 dark:text-white">{t['Udhaar (Credit)']}</div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                        {khataInfo ? `₹${khataInfo.availableCredit} ${t['available']}` : t['Pay on credit']}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <input
-                                                type="radio"
-                                                name="payment"
-                                                value="ledger"
-                                                checked={paymentMethod === 'ledger'}
-                                                onChange={() => setPaymentMethod('ledger')}
-                                                disabled={khataInfo !== null && cartTotal > khataInfo.availableCredit}
-                                                className="sr-only"
-                                            />
-                                            {khataInfo && cartTotal > khataInfo.availableCredit && (
-                                                <div className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                                                    {t['Limit Exceeded']}
-                                                </div>
-                                            )}
-                                        </label>
+                                        <PaymentOptionLabel
+                                            value="cash"
+                                            currentMethod={paymentMethod}
+                                            onChange={setPaymentMethod}
+                                            t={t}
+                                            title="Cash"
+                                            description="Pay with physical currency"
+                                        />
+                                        <PaymentOptionLabel
+                                            value="online"
+                                            currentMethod={paymentMethod}
+                                            onChange={setPaymentMethod}
+                                            t={t}
+                                            title="UPI / Online"
+                                            description="PhonePe, GPay, Paytm"
+                                        />
+                                        <PaymentOptionLabel
+                                            value="ledger"
+                                            currentMethod={paymentMethod}
+                                            onChange={setPaymentMethod}
+                                            t={t}
+                                            title="Udhaar (Credit)"
+                                            description="Pay on credit"
+                                            disabled={khataInfo !== null && cartTotal > khataInfo.availableCredit}
+                                            cartTotal={cartTotal}
+                                            khataInfo={khataInfo}
+                                        />
                                     </div>
                                 </div>
 

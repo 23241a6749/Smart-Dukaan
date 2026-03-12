@@ -33,15 +33,20 @@ export function useTranslate<T extends object>(data: T[], fields: string[]): T[]
         return path.split('.').reduce((acc, part) => acc && acc[part], obj);
     };
 
-    // Helper to set nested value on a clone
-    const setNestedValue = (obj: any, path: string, value: string) => {
+    // Helper to set nested value on a clone (efficient shallow copies)
+    const setNestedValue = (obj: any, path: string, value: string): any => {
         const parts = path.split('.');
-        let current = obj;
+        const result = { ...obj };
+        let current = result;
+
         for (let i = 0; i < parts.length - 1; i++) {
-            current[parts[i]] = { ...current[parts[i]] };
-            current = current[parts[i]];
+            const part = parts[i];
+            current[part] = { ...current[part] };
+            current = current[part];
         }
+
         current[parts[parts.length - 1]] = value;
+        return result;
     };
 
     useEffect(() => {
@@ -55,12 +60,7 @@ export function useTranslate<T extends object>(data: T[], fields: string[]): T[]
         prevLangRef.current = language;
         prevFieldsKeyRef.current = fieldsKey;
 
-        if (language === 'en') {
-            setTranslatedData(data);
-            return;
-        }
-
-        if (!data || data.length === 0) {
+        if (language === 'en' || !data || data.length === 0) {
             setTranslatedData(data);
             return;
         }
@@ -82,32 +82,47 @@ export function useTranslate<T extends object>(data: T[], fields: string[]): T[]
             return;
         }
 
+        let isMounted = true;
+
         const translateAsync = async () => {
             try {
                 const translations = await batchTranslate(Array.from(stringsToTranslate));
 
+                if (!isMounted) return;
+
+                let overallChanged = false;
                 const newData = data.map(item => {
-                    let changed = false;
-                    const newItem = JSON.parse(JSON.stringify(item)); // Deep clone for safety with nested objects
+                    let itemChanged = false;
+                    let newItem = item;
 
                     fields.forEach(field => {
                         const val = getNestedValue(item, field);
-                        if (typeof val === 'string' && val.trim() && translations[val.trim()] && translations[val.trim()] !== val) {
-                            setNestedValue(newItem, field, translations[val.trim()]);
-                            changed = true;
+                        if (typeof val === 'string' && val.trim()) {
+                            const translated = translations[val.trim()];
+                            if (translated && translated !== val) {
+                                newItem = setNestedValue(newItem, field, translated);
+                                itemChanged = true;
+                            }
                         }
                     });
-                    return changed ? newItem : item;
+
+                    if (itemChanged) overallChanged = true;
+                    return itemChanged ? newItem : item;
                 });
 
-                setTranslatedData(newData);
+                if (overallChanged) {
+                    setTranslatedData(newData);
+                } else {
+                    setTranslatedData(data);
+                }
             } catch (err) {
                 console.warn('[useTranslate] Translation failed, using original data:', err);
-                setTranslatedData(data);
+                if (isMounted) setTranslatedData(data);
             }
         };
 
         translateAsync();
+        return () => { isMounted = false; };
     }, [data, language, fieldsKey, batchTranslate]);
 
     return translatedData;

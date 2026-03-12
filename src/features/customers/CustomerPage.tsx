@@ -6,6 +6,182 @@ import { db } from '../../db/db';
 import { getKhataStatus, recalculateKhataScore } from '../../lib/khataLogic';
 import { useLanguage } from '../../contexts/LanguageContext';
 
+const CustomerCard = React.memo(({
+  customer,
+  khataStatus,
+  styles,
+  onView,
+  onExplain,
+  onSettle,
+  formatDate,
+  t
+}: {
+  customer: any,
+  khataStatus: any,
+  styles: any,
+  onView: (c: any) => void,
+  onExplain: (e: any) => void,
+  onSettle: (c: any) => void,
+  formatDate: (d: any) => string,
+  t: any
+}) => (
+  <div
+    onClick={() => onView(customer)}
+    className="bg-white dark:bg-gray-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all active:scale-[0.99] cursor-pointer"
+  >
+    <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+      <div className="flex items-center gap-4">
+        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-inner ${styles.bg}`}>
+          {customer.name ? customer.name[0].toUpperCase() : <Phone size={24} className={styles.text} />}
+        </div>
+        <div>
+          <div className="font-black text-gray-900 dark:text-white text-lg flex items-center gap-2">
+            {customer.name || t['Unnamed Customer']}
+            {customer.khataBalance > 1500 && <AlertCircle size={16} className="text-red-500" />}
+          </div>
+          <div className="text-gray-500 font-medium flex items-center gap-1">
+            <Phone size={14} /> {customer.phoneNumber}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:flex items-center gap-4 md:gap-8">
+        {khataStatus && (
+          <div className="hidden md:block">
+            <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">{t['Udhaar Score']}</div>
+            <div className="flex items-center gap-2">
+              <div className="px-2 py-1 bg-gradient-to-r from-primary-green to-blue-600 rounded-lg text-white font-black text-sm">
+                {khataStatus.score}
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExplain({ ...khataStatus, name: customer.name });
+                }}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+              >
+                <Info size={14} className="text-gray-400" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="text-center md:text-right order-2 md:order-1">
+          <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider">{t['Due Balance']}</div>
+          <div className={`text-2xl font-black ${styles.text}`}>₹{customer.khataBalance} <span className="text-lg opacity-50">{styles.icon}</span></div>
+        </div>
+        <div className="flex flex-col gap-1 order-1 md:order-3 text-sm text-gray-500 font-bold">
+          <div className="flex items-center gap-2"><History size={14} className="text-primary-green" /><span>{t['Activity Log']}</span></div>
+          <div className="flex items-center gap-2"><Calendar size={14} className="text-orange-400" /><span>{formatDate(customer.lastVisit || customer.createdAt)}</span></div>
+          <div className="flex items-center gap-2"><TrendingUp size={14} className="text-orange-400" /><span>Limit: ₹{khataStatus?.limit || 3000}</span></div>
+          {customer.khataBalance > 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSettle(customer);
+              }}
+              className="mt-1 text-xs bg-orange-500 text-white px-2 py-1 rounded-lg font-black uppercase tracking-tighter shadow-sm active:scale-95 transition-all"
+            >
+              {t['Settle Dues']}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+
+    {khataStatus && (
+      <div className="mt-4 pt-4 border-t border-gray-50 dark:border-gray-700 md:hidden flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Award size={16} className="text-primary-green" />
+          <span className="text-xs font-bold text-gray-500">Score: {khataStatus.score}</span>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onExplain({ ...khataStatus, name: customer.name });
+          }}
+          className="text-xs font-black text-primary-green uppercase tracking-tighter"
+        >
+          Explain Logic
+        </button>
+      </div>
+    )}
+  </div>
+));
+
+const TransactionRow = React.memo(({ tx, idx, t }: { tx: any, idx: number, t: any }) => {
+  const isCredit = tx.type === 'credit';
+  const isKhata = tx.paymentMode === 'KHATA';
+  const isInstant = tx.type === 'debit' && !isKhata;
+
+  let cardStyle = 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700';
+  let icon = '📦';
+  let iconBg = 'bg-gray-100 dark:bg-gray-700 text-gray-500';
+  let label = 'Purchase';
+  let amountColor = 'text-gray-900 dark:text-white';
+  let subLabel = 'Total Bill';
+
+  if (isCredit) {
+    cardStyle = 'bg-green-50/50 dark:bg-green-900/20 border-green-100 dark:border-green-800';
+    icon = '💰';
+    iconBg = 'bg-green-500 text-white';
+    label = 'Repayment';
+    amountColor = 'text-green-600';
+    subLabel = 'Dues Settled';
+  } else if (isKhata) {
+    cardStyle = 'bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/30';
+    icon = '📉';
+    iconBg = 'bg-orange-500 text-white';
+    label = 'Udhaar Added';
+    amountColor = 'text-orange-600';
+    subLabel = 'Added to Debt';
+  } else if (isInstant) {
+    cardStyle = 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30';
+    icon = '✅';
+    iconBg = 'bg-blue-500 text-white';
+    label = 'Instant Paid';
+    amountColor = 'text-blue-600';
+    subLabel = 'Cash/UPI Sale';
+  }
+
+  return (
+    <div
+      key={idx}
+      className={`p-4 rounded-[2rem] border transition-all flex justify-between items-center ${cardStyle}`}
+    >
+      <div className="flex items-center gap-4">
+        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-inner ${iconBg}`}>
+          {icon}
+        </div>
+        <div>
+          <div className="flex items-center gap-1.5">
+            <span className={`font-black uppercase tracking-tighter text-sm ${amountColor}`}>
+              {t[label] || label}
+            </span>
+            <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase ${tx.paymentMode === 'CASH' ? 'bg-orange-100 text-orange-600' :
+              tx.paymentMode === 'UPI' || tx.paymentMode === 'ONLINE' ? 'bg-purple-100 text-purple-600' :
+                'bg-blue-100 text-blue-600'
+              }`}>
+              {tx.paymentMode}
+            </span>
+          </div>
+          <div className="text-[10px] text-gray-400 font-bold mt-0.5">
+            {new Date(tx.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+          </div>
+        </div>
+      </div>
+      <div className="text-right">
+        <div className={`text-xl font-black ${amountColor}`}>
+          {isCredit ? '-' : '+'}₹{tx.amount}
+        </div>
+        <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">
+          {t[subLabel] || subLabel}
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export const CustomerPage: React.FC = () => {
   const { t } = useLanguage();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -22,35 +198,40 @@ export const CustomerPage: React.FC = () => {
   const [customerTransactions, setCustomerTransactions] = useState<any[]>([]);
   const [txFilter, setTxFilter] = useState<'all' | 'khata' | 'settlement' | 'instant'>('all');
 
-  useEffect(() => {
-    loadCustomers();
-  }, []);
-
-  async function loadCustomers() {
+  const loadCustomers = React.useCallback(async () => {
     try {
       const response = await customerApi.getAll();
-      console.log('API Response:', response.data);
       const apiCustomers = response.data;
       setCustomers(apiCustomers);
 
-      // Load matching Khata details (prefer API values, fallback to local status)
-      const details: Record<string, any> = {};
-      for (const cust of apiCustomers) {
+      // Load matching Khata details in parallel for better performance
+      const khataPromises = apiCustomers.map(async (cust: Customer) => {
         try {
           const status = await getKhataStatus(cust.phoneNumber, cust.khataScore, cust.khataLimit);
-          if (status) details[cust.phoneNumber] = status;
+          return { phone: cust.phoneNumber, status };
         } catch (statusErr) {
           console.error(`Error getting khata status for ${cust.phoneNumber}:`, statusErr);
+          return { phone: cust.phoneNumber, status: null };
         }
-      }
+      });
+
+      const results = await Promise.all(khataPromises);
+      const details: Record<string, any> = {};
+      results.forEach(res => {
+        if (res.status) details[res.phone] = res.status;
+      });
       setKhataDetails(details);
     } catch (err: any) {
       console.error('Failed to load customers', err);
-      console.error('Error details:', err.response?.data);
     }
-  }
+  }, []);
 
-  const getLedgerStyles = (balance: number) => {
+  useEffect(() => {
+    loadCustomers();
+  }, [loadCustomers]);
+
+
+  const getLedgerStyles = React.useCallback((balance: number) => {
     if (balance <= 500) return {
       text: 'text-green-600',
       bg: 'bg-green-50',
@@ -72,9 +253,9 @@ export const CustomerPage: React.FC = () => {
       badge: 'bg-red-600',
       icon: '🔴'
     };
-  };
+  }, []);
 
-  const handleAddCustomer = async () => {
+  const handleAddCustomer = React.useCallback(async () => {
     if (!formData.phoneNumber || formData.phoneNumber.length !== 10) {
       alert('Valid 10-digit phone number is required');
       return;
@@ -88,18 +269,26 @@ export const CustomerPage: React.FC = () => {
     } catch (err) {
       console.error('Failed to save customer', err);
     }
-  };
+  }, [formData, loadCustomers]);
 
-  const formatDate = (dateString?: string | number) => {
+  const formatDate = React.useCallback((dateString?: string | number) => {
     if (!dateString) return 'No visits yet';
     return new Date(dateString).toLocaleDateString('en-IN', {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
     });
-  };
+  }, []);
 
-  const handleSettleDues = async () => {
+  const handleViewCustomer = React.useCallback(async (customer: any) => {
+    setViewingCustomer(customer);
+    const transactions = await db.ledger
+      .where('customerId').equals(customer.phoneNumber)
+      .toArray();
+    setCustomerTransactions(transactions.sort((a, b) => b.createdAt - a.createdAt));
+  }, []);
+
+  const handleSettleDues = React.useCallback(async () => {
     if (!settleModal || settleAmount <= 0) return;
 
     setIsProcessing(true);
@@ -169,22 +358,22 @@ export const CustomerPage: React.FC = () => {
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [settleModal, settleAmount, settleMode, loadCustomers, viewingCustomer, handleViewCustomer]);
 
-  const handleViewCustomer = async (customer: any) => {
-    setViewingCustomer(customer);
-    const transactions = await db.ledger
-      .where('customerId').equals(customer.phoneNumber)
-      .toArray();
-    setCustomerTransactions(transactions.sort((a, b) => b.createdAt - a.createdAt));
-  };
+  const handleExplain = React.useCallback((details: any) => {
+    setSelectedExplainer(details);
+  }, []);
 
+  const handleSettleTrigger = React.useCallback((customer: any) => {
+    setSettleModal(customer);
+    setSettleAmount(customer.khataBalance);
+  }, []);
 
-
-  const filteredCustomers = customers.filter(
-    c => (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.phoneNumber.includes(searchTerm)
-  );
+  const filteredCustomers = React.useMemo(() =>
+    customers.filter(
+      c => (c.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.phoneNumber.includes(searchTerm)
+    ), [customers, searchTerm]);
 
   return (
     <div className="space-y-6 pb-48">
@@ -264,97 +453,19 @@ export const CustomerPage: React.FC = () => {
             </button>
           </div>
         ) : (
-          filteredCustomers.map((customer) => {
-            const styles = getLedgerStyles(customer.khataBalance);
-            return (
-              <div
-                key={customer._id}
-                onClick={() => handleViewCustomer(customer)}
-                className="bg-white dark:bg-gray-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all active:scale-[0.99] cursor-pointer"
-              >
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-inner ${styles.bg}`}>
-                      {customer.name ? customer.name[0].toUpperCase() : <Phone size={24} className={styles.text} />}
-                    </div>
-                    <div>
-                      <div className="font-black text-gray-900 dark:text-white text-lg flex items-center gap-2">
-                        {customer.name || t['Unnamed Customer']}
-                        {customer.khataBalance > 1500 && <AlertCircle size={16} className="text-red-500" />}
-                      </div>
-                      <div className="text-gray-500 font-medium flex items-center gap-1">
-                        <Phone size={14} /> {customer.phoneNumber}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:flex items-center gap-4 md:gap-8">
-                    {/* Khata Score Section */}
-                    {khataDetails[customer.phoneNumber] && (
-                      <div className="hidden md:block">
-                        <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">{t['Udhaar Score']}</div>
-                        <div className="flex items-center gap-2">
-                          <div className="px-2 py-1 bg-gradient-to-r from-primary-green to-blue-600 rounded-lg text-white font-black text-sm">
-                            {khataDetails[customer.phoneNumber].score}
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedExplainer({ ...khataDetails[customer.phoneNumber], name: customer.name });
-                            }}
-                            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                          >
-                            <Info size={14} className="text-gray-400" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="text-center md:text-right order-2 md:order-1">
-                      <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider">{t['Due Balance']}</div>
-                      <div className={`text-2xl font-black ${styles.text}`}>₹{customer.khataBalance} <span className="text-lg opacity-50">{styles.icon}</span></div>
-                    </div>
-                    <div className="flex flex-col gap-1 order-1 md:order-3 text-sm text-gray-500 font-bold">
-                      <div className="flex items-center gap-2"><History size={14} className="text-primary-green" /><span>{t['Activity Log']}</span></div>
-                      <div className="flex items-center gap-2"><Calendar size={14} className="text-orange-400" /><span>{formatDate(customer.lastVisit || customer.createdAt)}</span></div>
-                      <div className="flex items-center gap-2"><TrendingUp size={14} className="text-orange-400" /><span>Limit: ₹{khataDetails[customer.phoneNumber]?.limit || 3000}</span></div>
-                      {customer.khataBalance > 0 && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSettleModal(customer);
-                            setSettleAmount(customer.khataBalance);
-                          }}
-                          className="mt-1 text-xs bg-orange-500 text-white px-2 py-1 rounded-lg font-black uppercase tracking-tighter shadow-sm active:scale-95 transition-all"
-                        >
-                          {t['Settle Dues']}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Mobile Score Bar */}
-                {khataDetails[customer.phoneNumber] && (
-                  <div className="mt-4 pt-4 border-t border-gray-50 dark:border-gray-700 md:hidden flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Award size={16} className="text-primary-green" />
-                      <span className="text-xs font-bold text-gray-500">Score: {khataDetails[customer.phoneNumber].score}</span>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedExplainer({ ...khataDetails[customer.phoneNumber], name: customer.name });
-                      }}
-                      className="text-xs font-black text-primary-green uppercase tracking-tighter"
-                    >
-                      Explain Logic
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })
+          filteredCustomers.map((customer) => (
+            <CustomerCard
+              key={customer._id}
+              customer={customer}
+              khataStatus={khataDetails[customer.phoneNumber]}
+              styles={getLedgerStyles(customer.khataBalance)}
+              onView={handleViewCustomer}
+              onExplain={handleExplain}
+              onSettle={handleSettleTrigger}
+              formatDate={formatDate}
+              t={t}
+            />
+          ))
         )}
       </div>
 
@@ -549,78 +660,9 @@ export const CustomerPage: React.FC = () => {
                         if (txFilter === 'instant') return tx.type === 'debit' && tx.paymentMode !== 'KHATA';
                         return true;
                       })
-                      .map((tx, idx) => {
-                        const isCredit = tx.type === 'credit';
-                        const isKhata = tx.paymentMode === 'KHATA';
-                        const isInstant = tx.type === 'debit' && !isKhata;
-
-                        let cardStyle = 'bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700';
-                        let icon = '📦';
-                        let iconBg = 'bg-gray-100 dark:bg-gray-700 text-gray-500';
-                        let label = 'Purchase';
-                        let amountColor = 'text-gray-900 dark:text-white';
-                        let subLabel = 'Total Bill';
-
-                        if (isCredit) {
-                          cardStyle = 'bg-green-50/50 dark:bg-green-900/20 border-green-100 dark:border-green-800';
-                          icon = '💰';
-                          iconBg = 'bg-green-500 text-white';
-                          label = 'Repayment';
-                          amountColor = 'text-green-600';
-                          subLabel = 'Dues Settled';
-                        } else if (isKhata) {
-                          cardStyle = 'bg-orange-50/50 dark:bg-orange-900/10 border-orange-100 dark:border-orange-900/30';
-                          icon = '📉';
-                          iconBg = 'bg-orange-500 text-white';
-                          label = 'Udhaar Added';
-                          amountColor = 'text-orange-600';
-                          subLabel = 'Added to Debt';
-                        } else if (isInstant) {
-                          cardStyle = 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-900/30';
-                          icon = '✅';
-                          iconBg = 'bg-blue-500 text-white';
-                          label = 'Instant Paid';
-                          amountColor = 'text-blue-600';
-                          subLabel = 'Cash/UPI Sale';
-                        }
-
-                        return (
-                          <div
-                            key={idx}
-                            className={`p-4 rounded-[2rem] border transition-all flex justify-between items-center ${cardStyle}`}
-                          >
-                            <div className="flex items-center gap-4">
-                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shadow-inner ${iconBg}`}>
-                                {icon}
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`font-black uppercase tracking-tighter text-sm ${amountColor}`}>
-                                    {label}
-                                  </span>
-                                  <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase ${tx.paymentMode === 'CASH' ? 'bg-orange-100 text-orange-600' :
-                                    tx.paymentMode === 'UPI' || tx.paymentMode === 'ONLINE' ? 'bg-purple-100 text-purple-600' :
-                                      'bg-blue-100 text-blue-600'
-                                    }`}>
-                                    {tx.paymentMode}
-                                  </span>
-                                </div>
-                                <div className="text-[10px] text-gray-400 font-bold mt-0.5">
-                                  {new Date(tx.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className={`text-xl font-black ${amountColor}`}>
-                                {isCredit ? '-' : '+'}₹{tx.amount}
-                              </div>
-                              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">
-                                {subLabel}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
+                      .map((tx, idx) => (
+                        <TransactionRow key={idx} tx={tx} idx={idx} t={t} />
+                      ))
                   )}
                 </div>
               </div>

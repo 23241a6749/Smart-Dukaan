@@ -5,6 +5,21 @@ import type { Product } from '../../db/db';
 import { useTranslate } from '../../hooks/useTranslate';
 import { useLanguage } from '../../contexts/LanguageContext';
 
+const InventoryItemCard = React.memo(({ product, t }: { product: Product, t: any }) => (
+    <div key={product._id} className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center border border-gray-100">
+        <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center text-2xl">{product.icon || '📦'}</div>
+            <div>
+                <h4 className="font-bold text-gray-800">{product.name}</h4>
+                <p className="text-xs text-gray-500">{t['Available Stock']}: {product.stock}</p>
+            </div>
+        </div>
+        <div className="text-right">
+            <span className="block font-bold text-primary-green text-lg">₹{product.price}</span>
+        </div>
+    </div>
+));
+
 export const InventoryPage: React.FC = () => {
     const { t } = useLanguage();
     const [products, setProducts] = useState<Product[]>([]);
@@ -12,20 +27,20 @@ export const InventoryPage: React.FC = () => {
     const [isAdding, setIsAdding] = useState(false);
     const [newProduct, setNewProduct] = useState({ name: '', price: '', stock: '', category: 'default', unit: 'piece' });
 
-    useEffect(() => {
-        loadProducts();
-    }, []);
-
-    async function loadProducts() {
+    const loadProducts = React.useCallback(async () => {
         try {
             const response = await productApi.getAll();
             setProducts(response.data);
         } catch (err) {
             console.error('Failed to load products', err);
         }
-    }
+    }, []);
 
-    const handleAddProduct = async () => {
+    useEffect(() => {
+        loadProducts();
+    }, [loadProducts]);
+
+    const handleAddProduct = React.useCallback(async () => {
         if (!newProduct.name || !newProduct.price) return;
         try {
             await productApi.create({
@@ -42,7 +57,20 @@ export const InventoryPage: React.FC = () => {
         } catch (err) {
             console.error('Failed to save product', err);
         }
-    };
+    }, [newProduct, loadProducts]);
+
+    const handleSeedInventory = React.useCallback(async () => {
+        if (confirm(t['Add 20+ starter items to your inventory?'])) {
+            try {
+                await productApi.seed();
+                alert(t['Inventory filled!']);
+                loadProducts();
+            } catch (e) {
+                alert(t['Failed to seed']);
+                console.error(e);
+            }
+        }
+    }, [t, loadProducts]);
 
     return (
         <div className="p-4 safe-area-bottom">
@@ -96,18 +124,7 @@ export const InventoryPage: React.FC = () => {
                             <Plus size={24} /> {t['Add New Product']}
                         </button>
                         <button
-                            onClick={async () => {
-                                if (confirm(t['Add 20+ starter items to your inventory?'])) {
-                                    try {
-                                        await productApi.seed();
-                                        alert(t['Inventory filled!']);
-                                        loadProducts();
-                                    } catch (e) {
-                                        alert(t['Failed to seed']);
-                                        console.error(e);
-                                    }
-                                }
-                            }}
+                            onClick={handleSeedInventory}
                             className="flex-1 bg-primary-green text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all"
                         >
                             <Save size={24} /> {t['Fast Fill Inventory']}
@@ -115,18 +132,7 @@ export const InventoryPage: React.FC = () => {
                     </div>
                     <div className="space-y-6 pb-48">
                         {translatedProducts.map(product => (
-                            <div key={product._id} className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center border border-gray-100">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center text-2xl">{product.icon || '📦'}</div>
-                                    <div>
-                                        <h4 className="font-bold text-gray-800">{product.name}</h4>
-                                        <p className="text-xs text-gray-500">{t['Available Stock']}: {product.stock}</p>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <span className="block font-bold text-primary-green text-lg">₹{product.price}</span>
-                                </div>
-                            </div>
+                            <InventoryItemCard key={product._id} product={product} t={t} />
                         ))}
                     </div>
                 </>

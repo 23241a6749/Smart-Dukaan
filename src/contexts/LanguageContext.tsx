@@ -623,7 +623,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         localStorage.setItem('translations_cache_v2', JSON.stringify(cache));
     }, [cache]);
 
-    const batchTranslate = async (texts: string[]): Promise<Record<string, string>> => {
+    const batchTranslate = React.useCallback(async (texts: string[]): Promise<Record<string, string>> => {
         if (language === 'en') {
             const result: Record<string, string> = {};
             texts.forEach(t => result[t] = t);
@@ -667,66 +667,69 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         } finally {
             setIsTranslating(false);
         }
-    };
+    }, [language, cache]);
 
-    const translate = (text: string): string => {
+    const pendingTranslations = React.useRef<Set<string>>(new Set());
+    const batchTimeout = React.useRef<any>(null);
+
+    const processPendingTranslations = React.useCallback(async () => {
+        if (pendingTranslations.current.size === 0) return;
+
+        const textsToTranslate = Array.from(pendingTranslations.current);
+        pendingTranslations.current.clear();
+
+        await batchTranslate(textsToTranslate);
+    }, [batchTranslate]);
+
+    const translate = React.useCallback((text: string): string => {
         if (!text || language === 'en') return text;
+
+        // Check cache first
         if (cache[language][text]) return cache[language][text];
 
-        // Trigger background translation for single string (non-blocking)
-        fetchSingleTranslation(text, language);
+        // Check static translations as well just in case (though proxy usually handles this)
+        const staticForLang = staticTranslations[language] || staticTranslations.en;
+        if (text in staticForLang) return (staticForLang as any)[text];
+
+        // Add to pending set for batch processing
+        pendingTranslations.current.add(text);
+
+        if (batchTimeout.current) clearTimeout(batchTimeout.current);
+        batchTimeout.current = setTimeout(processPendingTranslations, 50); // 50ms window to collect strings
+
         return text;
-    };
+    }, [language, cache, processPendingTranslations]);
 
-    const fetchSingleTranslation = async (text: string, targetLang: Language) => {
-        if (cache[targetLang][text]) return;
-
-        try {
-            const token = localStorage.getItem('token');
-            const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5001/api'}/ai/translate`, {
-                text,
-                targetLanguage: targetLang
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            const translated = res.data.translatedText;
-            if (translated) {
-                setCache(prev => ({
-                    ...prev,
-                    [targetLang]: { ...prev[targetLang], [text]: translated }
-                }));
-            }
-        } catch (err) {
-            console.error('Single translation failed:', err);
-        }
-    };
-
-    const toggleLanguage = () => {
+    const toggleLanguage = React.useCallback(() => {
         setLanguage(prev => {
             if (prev === 'en') return 'hi';
             if (prev === 'hi') return 'te';
             return 'en';
         });
-    };
+    }, []);
 
-    const tProxy = new Proxy(staticTranslations[language] || staticTranslations.en, {
-        get: (target: any, prop: string) => {
-            if (prop in target) return target[prop];
-            return translate(prop);
-        }
-    });
+    const t = React.useMemo(() => {
+        const staticForLang = staticTranslations[language] || staticTranslations.en;
+        return new Proxy(staticForLang, {
+            get: (target: any, prop: string) => {
+                if (prop in target) return target[prop];
+                return translate(prop);
+            }
+        });
+    }, [language, translate]);
+
+    const contextValue = React.useMemo(() => ({
+        language,
+        setLanguage,
+        t,
+        translate,
+        batchTranslate,
+        toggleLanguage,
+        isTranslating
+    }), [language, t, translate, batchTranslate, toggleLanguage, isTranslating]);
 
     return (
-        <LanguageContext.Provider value={{
-            language,
-            setLanguage,
-            t: tProxy,
-            translate,
-            batchTranslate,
-            toggleLanguage,
-            isTranslating
-        }}>
+        <LanguageContext.Provider value={contextValue}>
             {children}
         </LanguageContext.Provider>
     );
