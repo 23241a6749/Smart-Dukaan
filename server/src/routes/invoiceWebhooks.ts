@@ -870,13 +870,6 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
     const callCountHeader = String(req.query?.CallCount || req.body?.CallCount || '0');
     const callCount = parseInt(callCountHeader, 10) || 0;
 
-    // Prevent infinite loops - max 3 back-and-forth exchanges
-    const MAX_CALL_TURNS = 3;
-    if (callCount >= MAX_CALL_TURNS) {
-        console.log('[Voice] Max call turns reached, ending call');
-        return res.send(buildHangupTwiml('Thank you for your time. We will follow up with you shortly. Goodbye.'));
-    }
-
     try {
         const speechResult = req.body?.SpeechResult || '';
         const from = req.body?.From || '';
@@ -889,6 +882,18 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
         let customerPhone = from;
         if (from === voiceNum) {
             customerPhone = to;
+        }
+
+        // Resolve customer language preference FIRST
+        const voiceLangCtx = await resolveVoiceLanguageContextByPhone(customerPhone);
+        const lang: VoiceLang = voiceLangCtx.lang;
+        console.log(`[Voice] Resolved language: ${lang} (source: ${voiceLangCtx.source})`);
+
+        // Prevent infinite loops - max 6 back-and-forth exchanges for better conversation
+        const MAX_CALL_TURNS = 6;
+        if (callCount >= MAX_CALL_TURNS) {
+            console.log('[Voice] Max call turns reached, ending call');
+            return res.send(buildHangupTwiml(getVoicePrompt(lang, 'closurePromised', { promisedDateText: formatDateForVoice(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), lang) }), lang));
         }
 
         // If no speech detected, re-prompt with retry cap
@@ -937,14 +942,19 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
             }
 
             console.log('[Voice] No speech detected, re-prompting...');
-            return res.send(buildGatherTwiml('Hello, I could not hear you clearly. Please tell me when you can pay your pending amount.', backendUrl, callCount));
+            return res.send(buildGatherTwiml(
+                getVoicePrompt(lang, 'noSpeechRetry'),
+                backendUrl,
+                callCount,
+                lang
+            ));
         }
 
         // Find invoice for this phone number
         const last10 = customerPhone.replace(/[^0-9]/g, '').slice(-10);
         if (!last10 || last10.length < 10) {
             console.log('[Voice] Invalid phone number, hanging up.');
-            return res.send(buildHangupTwiml('Sorry, I could not identify your account. Goodbye.'));
+            return res.send(buildHangupTwiml(getVoicePrompt(lang, 'noInvoice'), lang));
         }
 
         const invoice = await Invoice.findOne({
@@ -954,7 +964,7 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
 
         if (!invoice) {
             console.log(`[Voice] No active invoice for phone ...${last10}`);
-            return res.send(buildHangupTwiml('Thank you. We have no pending dues for you. Goodbye.'));
+            return res.send(buildHangupTwiml(getVoicePrompt(lang, 'noInvoice'), lang));
         }
 
         console.log(`[Voice] Found invoice ${invoice.invoice_id} for ${invoice.client_name}`);
@@ -1004,12 +1014,42 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
         // Save AI reply to memory
         appendToHistory(invoiceId, 'assistant', aiReply);
 
-        // Check if AI wants to end the call
+        // Check if AI wants to end the call - only end on clear outcomes
         const shouldEndByModel = aiReply.includes('END_CALL');
         aiReply = aiReply.replace(/END_CALL/g, '').trim();
 
-        const shouldEnd = shouldEndByModel || intent !== 'UNKNOWN' || finalConfidence < 0.4;
-        console.log(`[Voice] ${invoice.client_name}: "${speechResult}" -> AI: "${aiReply}" | Intent: ${intent} | Conf: ${finalConfidence.toFixed(2)} | End: ${shouldEnd}`);
+        // Only end call if: model says so, OR clear payment promise, OR clear dispute
+        // Continue conversation if: unknown intent or extension requested (need more info)
+        const shouldEnd = shouldEndByModel || intent === 'PAYMENT_PROMISED' || intent === 'DISPUTE';
+        
+        // Get localized prompt based on conversation stage
+        let nextPrompt = '';
+        if (shouldEnd) {
+            if (intent === 'PAYMENT_PROMISED') {
+                nextPrompt = getVoicePrompt(lang, 'closurePromised', { promisedDateText: parsedDate ? formatDateForVoice(parsedDate, lang) : undefined });
+            } else if (intent === 'EXTENSION_REQUESTED') {
+                nextPrompt = getVoicePrompt(lang, 'closurePartial', { 
+                    partialAmount: invoice.amount * 0.5,
+                    promisedDateText: parsedDate ? formatDateForVoice(parsedDate, lang) : undefined 
+                });
+            } else if (intent === 'DISPUTE') {
+                nextPrompt = getVoicePrompt(lang, 'closureDispute');
+            } else {
+                nextPrompt = getVoicePrompt(lang, 'closurePromised', { promisedDateText: formatDateForVoice(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), lang) });
+            }
+        } else {
+            // Continue conversation - ask next question based on intent
+            if (intent === 'UNKNOWN' || finalConfidence < 0.5) {
+                nextPrompt = getVoicePrompt(lang, 'askPartialNow', { minimumPartial: Math.min(100, invoice.amount * 0.1) });
+            } else if (intent === 'EXTENSION_REQUESTED') {
+                nextPrompt = getVoicePrompt(lang, 'askRemainingDate', { remainingAmount: invoice.amount });
+            } else {
+                // Default: ask about partial payment
+                nextPrompt = getVoicePrompt(lang, 'askPartialNow', { minimumPartial: Math.min(100, invoice.amount * 0.1) });
+            }
+        }
+        
+        console.log(`[Voice] ${invoice.client_name}: "${speechResult}" -> AI: "${aiReply}" | Intent: ${intent} | Conf: ${finalConfidence.toFixed(2)} | Lang: ${lang} | End: ${shouldEnd} | nextPrompt: "${nextPrompt?.substring(0, 50)}..."`);
 
         // Log conversation
         invoice.reminder_history.push({
@@ -1072,12 +1112,16 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
             }
 
             await invoice.save();
-            return res.send(buildHangupTwiml(aiReply));
+            return res.send(buildHangupTwiml(nextPrompt || aiReply, lang));
         }
 
         // Continue conversation
         await invoice.save();
-        return res.send(buildGatherTwiml(aiReply, backendUrl, callCount));
+        
+        const finalText = nextPrompt || aiReply;
+        console.log(`[Voice] Sending TwiML with lang=${lang}, voice=Google.${lang.toUpperCase()}-IN-Neural2-A, text="${finalText?.substring(0, 60)}..."`);
+        
+        return res.send(buildGatherTwiml(finalText, backendUrl, callCount, lang));
 
     } catch (e) {
         console.error('[Voice] CRITICAL ERROR:', e);

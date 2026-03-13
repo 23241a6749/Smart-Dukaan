@@ -6,7 +6,7 @@ import { CustomerAccount } from '../models/CustomerAccount.js';
 import { User } from '../models/User.js';
 import { normalizeLanguage, type VoiceLang } from './voiceLanguage.js';
 import { getVoicePrompt } from './voicePrompts.js';
-import { buildRecordFollowupTwimlLocalized } from './voiceTwiML.js';
+import { buildRecordFollowupTwimlLocalized, buildGatherTwimlLocalized } from './voiceTwiML.js';
 
 // Setup Twilio
 const twilioAvailable = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
@@ -75,8 +75,8 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
                 return 'skipped_non_target';
             }
 
-            // Voice agent: Use ONLY the localized prompt (not the English message)
-            // The voice prompt already contains the complete message in the customer's language
+            // Voice agent: Use Gather to properly wait for customer speech
+            // Use ONLY the localized prompt (no English mixing)
             const backendUrl = process.env.BACKEND_URL || '';
             if (!/^https?:\/\//.test(backendUrl)) {
                 console.error('[Voice Agent] BACKEND_URL is missing or invalid. It must be public http(s).');
@@ -84,13 +84,18 @@ export async function sendNotification(invoice: IInvoice, message: string, chann
             }
             const voiceCtx = await resolveCustomerVoiceContext(invoice.client_phone);
             
-            // Generate fully localized opening prompt (no English mixing)
+            console.log(`[Voice Agent] Calling ${invoice.client_phone}, resolved language: ${voiceCtx.lang}`);
+            
+            // Generate fully localized opening prompt (longer for better conversation)
             const localizedPrompt = getVoicePrompt(voiceCtx.lang, 'opening');
             
-            const twiml = buildRecordFollowupTwimlLocalized({
+            // Use Gather TwiML (not Record) to properly wait for speech
+            const twiml = buildGatherTwimlLocalized({
                 text: localizedPrompt,
                 backendUrl,
+                callCount: 0,
                 lang: voiceCtx.lang,
+                withDtmfFallback: true, // Allow keypad as fallback
             });
 
             await twilioClient.calls.create({
@@ -146,9 +151,12 @@ async function resolveCustomerVoiceContext(phone: string): Promise<{ lang: Voice
         .select('_id preferredVoiceLanguage preferredLanguage lockVoiceLanguage')
         .lean() as any;
 
+    console.log(`[Voice Agent] Customer found: ${customer?._id}, preferredVoiceLanguage: ${customer?.preferredVoiceLanguage}, preferredLanguage: ${customer?.preferredLanguage}`);
+
     if (!customer) return { lang: 'en', enableMenu: true };
 
     const preferred = normalizeLanguage(customer.preferredVoiceLanguage || customer.preferredLanguage || '');
+    console.log(`[Voice Agent] Normalized language: ${preferred}`);
     if (preferred && preferred !== 'en') {
         return { lang: preferred, enableMenu: false };
     }
