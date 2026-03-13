@@ -206,9 +206,9 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
                     });
                 }
 
-                if (state.negotiationStatus === 'completed' || state.hasTranscriptSince) {
+                if (state.negotiationStatus === 'completed') {
                     setStatus('completed');
-                    setInsight(state.negotiationSummary || `Call processed. Intent: ${state.lastIntent || 'UNKNOWN'}`);
+                    setInsight(state.negotiationSummary || `Call completed. Intent: ${state.lastIntent || 'UNKNOWN'}`);
                     setLastUpdate(new Date().toLocaleTimeString());
                     onResultRef.current({
                         status: 'success',
