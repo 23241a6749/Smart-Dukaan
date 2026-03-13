@@ -547,7 +547,6 @@ const staticTranslations = {
         'orders': 'ఆర్డర్లు',
         'Add Item': 'వస్తువును జోడించండి',
         'Price': 'ధర',
-        'Add 20+ starter items to your inventory?': 'మీ ఇన్వెంటరీకి 20+ వస్తువులను జోడించాలా?',
         'Inventory filled!': 'ఇన్వెంటరీ నిండిపోయింది!',
         'Failed to seed': 'డేటా చేర్చడం విఫలమైంది',
         'Active Udhaar': 'సక్రియాత్మక ఉధార్',
