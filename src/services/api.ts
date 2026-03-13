@@ -371,6 +371,87 @@ export const gstApi = {
         api.get<ITRSummary>('/reports/itr-summary', { params: { month, year } }),
 };
 
+export interface DiscountCode {
+    _id: string;
+    code: string;
+    shopkeeperId: string;
+    productId?: { _id: string; name: string; icon?: string };
+    description: string;
+    discountType: 'percentage' | 'fixed';
+    discountValue: number;
+    minPurchase: number;
+    maxUses: number;
+    usedCount: number;
+    validFrom: string;
+    validUntil: string;
+    isActive: boolean;
+    createdFor: 'expiry' | 'manual' | 'promotional';
+    linkedBatchId?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface DiscountValidation {
+    valid: boolean;
+    message?: string;
+    discount?: {
+        code: string;
+        description: string;
+        discountType: string;
+        discountValue: number;
+        discountAmount: number;
+    };
+}
+
+export interface DiscountCustomer {
+    _id: string;
+    name: string;
+    phoneNumber: string;
+    lastPurchased: string;
+    purchaseCount: number;
+    totalSpent: number;
+}
+
+export const discountApi = {
+    create: (data: {
+        productId?: string;
+        description?: string;
+        discountType: 'percentage' | 'fixed';
+        discountValue: number;
+        minPurchase?: number;
+        maxUses?: number;
+        validUntil: string;
+        createdFor?: 'expiry' | 'manual' | 'promotional';
+        linkedBatchId?: string;
+    }) => api.post<DiscountCode>('/discounts', data),
+    
+    getAll: (params?: { isActive?: boolean; createdFor?: string }) =>
+        api.get<DiscountCode[]>('/discounts', { params }),
+    
+    update: (id: string, data: {
+        isActive?: boolean;
+        discountValue?: number;
+        maxUses?: number;
+        validUntil?: string;
+    }) => api.patch<DiscountCode>(`/discounts/${id}`, data),
+    
+    validate: (data: { code: string; customerId?: string; billAmount?: number }) =>
+        api.post<DiscountValidation>('/discounts/validate', data),
+    
+    apply: (id: string, data: { billId?: string; customerId?: string; billAmount?: number }) =>
+        api.post<{ success: boolean; discountAmount: number; remainingUses: number }>(`/discounts/${id}/apply`, data),
+    
+    getCustomers: (productId: string, limit?: number) =>
+        api.get<DiscountCustomer[]>(`/discounts/customers/${productId}`, { params: { limit } }),
+    
+    notifyCustomers: (data: {
+        productId: string;
+        discountCode: string;
+        message?: string;
+        expiryDays?: number;
+    }) => api.post<{ success: boolean; sent: number; failed: number; total: number }>('/discounts/notify-customers', data),
+};
+
 
 export default api;
 

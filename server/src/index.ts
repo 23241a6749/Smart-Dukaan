@@ -32,6 +32,7 @@ import { gstRouter } from './routes/gst.js';
 import { reportsRouter } from './routes/reports.js';
 import { expiryRouter } from './routes/expiry.js';
 import { wasteRouter } from './routes/waste.js';
+import { discountRouter } from './routes/discounts.js';
 import { startExpiryScheduler } from './jobs/expiryScheduler.js';
 
 
@@ -81,6 +82,7 @@ app.use('/api/gst', gstRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/expiry', expiryRouter);
 app.use('/api/waste', wasteRouter);
+app.use('/api/discounts', discountRouter);
 
 io.on('connection', (socket) => {
     console.log('User connected to socket:', socket.id);

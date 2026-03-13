@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Recycle, RefreshCw, Trash2, ShoppingBag, DollarSign, X } from 'lucide-react';
-import { expiryApi, wasteApi, type ExpiryQueueItem, type ExpiryQueueSummary, type WasteLogItem } from '../../services/api';
+import { AlertTriangle, CheckCircle2, Recycle, RefreshCw, Trash2, ShoppingBag, DollarSign, X, Send, Users, Copy } from 'lucide-react';
+import { expiryApi, wasteApi, discountApi, type ExpiryQueueItem, type ExpiryQueueSummary, type WasteLogItem, type DiscountCode, type DiscountCustomer } from '../../services/api';
+import { useToast } from '../../contexts/ToastContext';
 import { useTranslate } from '../../hooks/useTranslate';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -15,6 +16,7 @@ const initialSummary: ExpiryQueueSummary = {
 
 export const ExpiryWastePage: React.FC = () => {
     const { t } = useLanguage();
+    const { addToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [summary, setSummary] = useState<ExpiryQueueSummary>(initialSummary);
@@ -37,6 +39,46 @@ export const ExpiryWastePage: React.FC = () => {
         reason: 'expired' as WasteLogItem['reason'],
         disposalMode: 'discarded' as WasteLogItem['disposalMode'],
         notes: '',
+    });
+
+    // Discount Modal State
+    const [discountModal, setDiscountModal] = useState<{
+        isOpen: boolean;
+        item: ExpiryQueueItem | null;
+        discountValue: number;
+        discountType: 'percentage' | 'fixed';
+        validDays: number;
+        loading: boolean;
+        createdCode: DiscountCode | null;
+    }>({
+        isOpen: false,
+        item: null,
+        discountValue: 15,
+        discountType: 'percentage',
+        validDays: 7,
+        loading: false,
+        createdCode: null,
+    });
+
+    // Customer List Modal State
+    const [customerModal, setCustomerModal] = useState<{
+        isOpen: boolean;
+        productId: string | null;
+        productName: string;
+        discountCode: string;
+        customers: DiscountCustomer[];
+        loading: boolean;
+        notifying: boolean;
+        notifyResult: { sent: number; failed: number } | null;
+    }>({
+        isOpen: false,
+        productId: null,
+        productName: '',
+        discountCode: '',
+        customers: [],
+        loading: false,
+        notifying: false,
+        notifyResult: null,
     });
 
     const topRiskItems = useMemo(() => translatedQueue.slice(0, 6), [translatedQueue]);
@@ -123,6 +165,100 @@ export const ExpiryWastePage: React.FC = () => {
         } catch (error) {
             console.error('Failed to update action', error);
         }
+    };
+
+    const openDiscountModal = (item: ExpiryQueueItem) => {
+        setDiscountModal({
+            isOpen: true,
+            item,
+            discountValue: item.daysToExpiry <= 3 ? 20 : 15,
+            discountType: 'percentage',
+            validDays: item.daysToExpiry <= 3 ? 3 : 7,
+            loading: false,
+            createdCode: null,
+        });
+    };
+
+    const handleCreateDiscount = async () => {
+        if (!discountModal.item || !discountModal.item.productId?._id) return;
+        
+        setDiscountModal(prev => ({ ...prev, loading: true }));
+        
+        try {
+            const validUntil = new Date();
+            validUntil.setDate(validUntil.getDate() + discountModal.validDays);
+            
+            const response = await discountApi.create({
+                productId: discountModal.item.productId._id,
+                description: `Expiry discount for ${discountModal.item.productId.name}`,
+                discountType: discountModal.discountType,
+                discountValue: discountModal.discountValue,
+                minPurchase: 0,
+                maxUses: 50,
+                validUntil: validUntil.toISOString(),
+                createdFor: 'expiry',
+                linkedBatchId: discountModal.item.batchId?._id,
+            });
+            
+            setDiscountModal(prev => ({ ...prev, loading: false, createdCode: response.data }));
+            addToast(`Discount code ${response.data.code} created!`, 'success');
+            
+            await markAction(discountModal.item._id, 'in_progress', { mode: 'discount', discountCode: response.data.code });
+        } catch (error: any) {
+            addToast(error.response?.data?.message || 'Failed to create discount', 'error');
+            setDiscountModal(prev => ({ ...prev, loading: false }));
+        }
+    };
+
+    const openCustomerModal = async (productId: string, productName: string, discountCode: string) => {
+        setCustomerModal({
+            isOpen: true,
+            productId,
+            productName,
+            discountCode,
+            customers: [],
+            loading: true,
+            notifying: false,
+            notifyResult: null,
+        });
+        
+        try {
+            const response = await discountApi.getCustomers(productId, 30);
+            setCustomerModal(prev => ({ ...prev, customers: response.data, loading: false }));
+        } catch (error) {
+            addToast('Failed to load customers', 'error');
+            setCustomerModal(prev => ({ ...prev, loading: false }));
+        }
+    };
+
+    const handleNotifyCustomers = async () => {
+        if (!customerModal.productId || !customerModal.discountCode) return;
+        
+        setCustomerModal(prev => ({ ...prev, notifying: true }));
+        
+        try {
+            const response = await discountApi.notifyCustomers({
+                productId: customerModal.productId,
+                discountCode: customerModal.discountCode,
+                expiryDays: 3,
+            });
+            
+            setCustomerModal(prev => ({ 
+                ...prev, 
+                notifying: false, 
+                notifyResult: { sent: response.data.sent, failed: response.data.failed } 
+            }));
+            
+            addToast(`Notified ${response.data.sent} customers!`, 'success');
+        } catch (error: any) {
+            addToast(error.response?.data?.message || 'Failed to notify customers', 'error');
+            setCustomerModal(prev => ({ ...prev, notifying: false }));
+        }
+    };
+
+    const copyToClipboard = (text: string) => {
+        navigator.clipboard.writeText(text);
+        addToast('Copied to clipboard!', 'success');
     };
 
     if (loading) {
@@ -220,7 +356,7 @@ export const ExpiryWastePage: React.FC = () => {
                                                     {t['Mark In Progress']}
                                                 </button>
                                                 <button
-                                                    onClick={() => markAction(item._id, 'done', { mode: 'discount' })}
+                                                    onClick={() => openDiscountModal(item)}
                                                     className="px-2.5 py-1.5 rounded-lg bg-green-50 text-primary-green text-[10px] font-bold hover:bg-green-100 transition-colors whitespace-nowrap flex-shrink"
                                                 >
                                                     {t['Apply Discount']}
@@ -339,6 +475,187 @@ export const ExpiryWastePage: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Discount Modal */}
+            {discountModal.isOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-xl font-black text-gray-900">Create Discount Code</h3>
+                            <button onClick={() => setDiscountModal(prev => ({ ...prev, isOpen: false }))} className="p-2 hover:bg-gray-100 rounded-xl">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {discountModal.item && (
+                            <div className="space-y-4">
+                                <div className="bg-green-50 p-4 rounded-2xl">
+                                    <p className="font-bold text-gray-900">{discountModal.item.productId?.name}</p>
+                                    <p className="text-sm text-gray-500">
+                                        {discountModal.item.daysToExpiry <= 3 ? '⚠️ Expiring soon!' : `${discountModal.item.daysToExpiry} days left`}
+                                        • ₹{discountModal.item.valueAtRisk?.toLocaleString()} at risk
+                                    </p>
+                                </div>
+
+                                {!discountModal.createdCode ? (
+                                    <>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-bold text-gray-500">Discount %</label>
+                                                <input
+                                                    type="number"
+                                                    value={discountModal.discountValue}
+                                                    onChange={(e) => setDiscountModal(prev => ({ ...prev, discountValue: Number(e.target.value) }))}
+                                                    className="w-full px-4 py-3 rounded-2xl border border-gray-100 bg-gray-50 font-bold"
+                                                    min={5}
+                                                    max={50}
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <label className="text-xs font-bold text-gray-500">Valid Days</label>
+                                                <select
+                                                    value={discountModal.validDays}
+                                                    onChange={(e) => setDiscountModal(prev => ({ ...prev, validDays: Number(e.target.value) }))}
+                                                    className="w-full px-4 py-3 rounded-2xl border border-gray-100 bg-gray-50 font-bold"
+                                                >
+                                                    <option value={3}>3 Days</option>
+                                                    <option value={5}>5 Days</option>
+                                                    <option value={7}>7 Days</option>
+                                                    <option value={14}>14 Days</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setDiscountModal(prev => ({ ...prev, discountType: 'percentage' }))}
+                                                className={`flex-1 py-3 rounded-2xl font-bold text-sm ${discountModal.discountType === 'percentage' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600'}`}
+                                            >
+                                                Percentage %
+                                            </button>
+                                            <button
+                                                onClick={() => setDiscountModal(prev => ({ ...prev, discountType: 'fixed' }))}
+                                                className={`flex-1 py-3 rounded-2xl font-bold text-sm ${discountModal.discountType === 'fixed' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600'}`}
+                                            >
+                                                Fixed ₹
+                                            </button>
+                                        </div>
+
+                                        <button
+                                            onClick={handleCreateDiscount}
+                                            disabled={discountModal.loading}
+                                            className="w-full bg-primary-green text-white py-4 rounded-2xl font-black text-sm shadow-lg shadow-green-100 hover:scale-[1.02] transition-transform disabled:opacity-50"
+                                        >
+                                            {discountModal.loading ? 'Creating...' : `Create ${discountModal.discountType === 'percentage' ? `${discountModal.discountValue}%` : `₹${discountModal.discountValue}`} Discount`}
+                                        </button>
+                                    </>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="bg-green-50 border-2 border-green-200 p-4 rounded-2xl text-center">
+                                            <p className="text-sm text-gray-600 mb-2">Discount Code Created!</p>
+                                            <div className="flex items-center justify-center gap-2">
+                                                <span className="text-3xl font-black text-primary-green">{discountModal.createdCode.code}</span>
+                                                <button onClick={() => copyToClipboard(discountModal.createdCode!.code)} className="p-2 hover:bg-green-100 rounded-xl">
+                                                    <Copy size={18} />
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-gray-500 mt-2">
+                                                Valid until {new Date(discountModal.createdCode.validUntil).toLocaleDateString()}
+                                            </p>
+                                        </div>
+
+                                        <button
+                                            onClick={() => discountModal.item && discountModal.createdCode && openCustomerModal(
+                                                discountModal.item.productId?._id || '',
+                                                discountModal.item.productId?.name || '',
+                                                discountModal.createdCode.code
+                                            )}
+                                            disabled={!discountModal.item || !discountModal.createdCode}
+                                            className="w-full bg-blue-500 text-white py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            <Send size={16} />
+                                            Notify Previous Customers
+                                        </button>
+
+                                        <button
+                                            onClick={() => setDiscountModal(prev => ({ ...prev, isOpen: false }))}
+                                            className="w-full bg-gray-100 text-gray-700 py-3 rounded-2xl font-bold text-sm"
+                                        >
+                                            Done
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Customer Notification Modal */}
+            {customerModal.isOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl max-h-[80vh] overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-black text-gray-900">Notify Customers</h3>
+                            <button onClick={() => setCustomerModal(prev => ({ ...prev, isOpen: false }))} className="p-2 hover:bg-gray-100 rounded-xl">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="bg-blue-50 p-3 rounded-2xl mb-4">
+                            <p className="font-bold text-sm">{customerModal.productName}</p>
+                            <p className="text-xs text-gray-600">Code: <span className="font-black text-primary-green">{customerModal.discountCode}</span></p>
+                        </div>
+
+                        {customerModal.notifyResult ? (
+                            <div className="bg-green-50 p-4 rounded-2xl text-center">
+                                <CheckCircle2 size={48} className="mx-auto text-green-500 mb-2" />
+                                <p className="font-bold text-gray-900">Sent to {customerModal.notifyResult.sent} customers!</p>
+                                {customerModal.notifyResult.failed > 0 && (
+                                    <p className="text-sm text-gray-500">{customerModal.notifyResult.failed} failed</p>
+                                )}
+                            </div>
+                        ) : customerModal.loading ? (
+                            <div className="py-8 text-center">
+                                <div className="animate-spin w-8 h-8 border-4 border-primary-green border-t-transparent rounded-full mx-auto" />
+                                <p className="text-sm text-gray-500 mt-2">Loading customers...</p>
+                            </div>
+                        ) : customerModal.customers.length === 0 ? (
+                            <div className="py-8 text-center opacity-50">
+                                <Users size={48} className="mx-auto text-gray-300 mb-2" />
+                                <p className="text-sm">No previous customers found</p>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex-1 overflow-y-auto mb-4">
+                                    <p className="text-xs text-gray-500 mb-2">{customerModal.customers.length} customers who bought this product</p>
+                                    <div className="space-y-2">
+                                        {customerModal.customers.slice(0, 10).map((customer) => (
+                                            <div key={customer._id} className="flex items-center justify-between p-2 bg-gray-50 rounded-xl">
+                                                <div>
+                                                    <p className="font-bold text-sm">{customer.name}</p>
+                                                    <p className="text-xs text-gray-500">{customer.phoneNumber}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-xs text-gray-500">{customer.purchaseCount} orders</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleNotifyCustomers}
+                                    disabled={customerModal.notifying}
+                                    className="w-full bg-primary-green text-white py-3 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {customerModal.notifying ? 'Sending...' : `Send to ${customerModal.customers.length} Customers`}
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

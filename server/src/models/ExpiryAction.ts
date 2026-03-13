@@ -29,6 +29,9 @@ const expiryActionSchema = new mongoose.Schema({
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     actedAt: { type: Date },
     lastEvaluatedAt: { type: Date, default: Date.now },
+    notificationSent: { type: Boolean, default: false },
+    notificationSentAt: { type: Date },
+    lastNotifiedBucket: { type: String },
 }, { timestamps: true });
 
 expiryActionSchema.index({ shopkeeperId: 1, riskBucket: 1, actionStatus: 1 });
