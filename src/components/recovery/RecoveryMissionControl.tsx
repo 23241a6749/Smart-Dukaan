@@ -60,6 +60,7 @@ const RecoveryMissionControl = ({ isOpen, onClose, customers }: { isOpen: boolea
         } catch (err) { console.error(err); }
     };
 
+    // Effect to handle opening the modal
     useEffect(() => {
         if (isOpen && !isOpenPrev && customers.length > 0) {
             const timer = setTimeout(() => {
@@ -74,8 +75,12 @@ const RecoveryMissionControl = ({ isOpen, onClose, customers }: { isOpen: boolea
             }, 0);
             return () => clearTimeout(timer);
         }
-        setIsOpenPrev(isOpen);
     }, [isOpen, customers, isOpenPrev]);
+
+    // Effect to track previous isOpen value
+    useEffect(() => {
+        setIsOpenPrev(isOpen);
+    }, [isOpen]);
 
     useEffect(() => {
         if (scrollRef.current) {

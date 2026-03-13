@@ -77,6 +77,7 @@ export const ProductPage: React.FC = () => {
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);

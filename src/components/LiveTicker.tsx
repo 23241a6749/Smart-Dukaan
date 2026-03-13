@@ -1,14 +1,17 @@
-import { useMemo } from 'react'
+import { useState, useEffect } from 'react'
 
 type Participant = { name: string; units: number; joined_at?: number }
 export default function LiveTicker({ participants }: { participants: Record<string, Participant> }) {
-  const ticks = useMemo(() => {
-    return Object.entries(participants || {})
-      .map(([id, p]) => ({ id, name: p.name, units: p.units, joined_at: p.joined_at || 0 }))
-      .sort((a, b) => (b.joined_at || 0) - (a.joined_at || 0))
-  }, [participants])
+  const [now, setNow] = useState<number>(Date.now)
 
-  const now = useMemo(() => Date.now(), [ticks])
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const ticks = Object.entries(participants || {})
+    .map(([id, p]) => ({ id, name: p.name, units: p.units, joined_at: p.joined_at || 0 }))
+    .sort((a, b) => (b.joined_at || 0) - (a.joined_at || 0))
 
   const timeAgo = (ts?: number, currentTime: number = now) => {
     if (!ts) return 'just now'

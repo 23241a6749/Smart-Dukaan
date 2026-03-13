@@ -15,10 +15,6 @@ export default function RecoveryPage() {
     // Fetch all customers from API
     const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
 
-    useEffect(() => {
-        loadCustomers();
-    }, []);
-
     const loadCustomers = React.useCallback(async () => {
         try {
             const response = await customerApi.getAll();
@@ -28,6 +24,10 @@ export default function RecoveryPage() {
             addToast("Failed to sync customers", "error");
         }
     }, [addToast]);
+
+    useEffect(() => {
+        loadCustomers();
+    }, [loadCustomers]);
 
     const [activeCall, setActiveCall] = useState<RecoveryCustomer | null>(null);
     const [isMissionControlOpen, setIsMissionControlOpen] = useState(false);

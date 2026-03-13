@@ -75,6 +75,7 @@ export const LedgerPage: React.FC = () => {
         }
     }, []);
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => {
         loadBills();
     }, [loadBills]);

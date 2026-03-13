@@ -108,7 +108,7 @@ const ToastCard: React.FC<{ toast: Toast; onRemove: () => void }> = ({ toast, on
   // track visible state for exit animation
   const [visible, setVisible] = useState(false);
   const [progress, setProgress] = useState(100);
-  const startRef = useRef(Date.now());
+  const startRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
 
   // mount → slide in
@@ -123,7 +123,7 @@ const ToastCard: React.FC<{ toast: Toast; onRemove: () => void }> = ({ toast, on
     startRef.current = Date.now();
 
     const tick = () => {
-      const elapsed = Date.now() - startRef.current;
+      const elapsed = Date.now() - (startRef.current ?? Date.now());
       const remaining = Math.max(0, 100 - (elapsed / duration) * 100);
       setProgress(remaining);
       if (remaining > 0) rafRef.current = requestAnimationFrame(tick);

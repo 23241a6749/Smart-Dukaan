@@ -88,8 +88,45 @@ function isOrderReadyToBill(order: WhatsAppOrder): boolean {
     return !order.convertedBillId && (order.reviewState ?? 'none') === 'none' && order.status !== 'cancelled' && order.items.length > 0 && order.totalAmount > 0;
 }
 
+function getSimpleStatusColor(status: string, reviewState: string): string {
+    if (reviewState === 'needs_manual_review') return 'bg-red-100 text-red-700';
+    if (reviewState === 'awaiting_customer_choice') return 'bg-orange-100 text-orange-700';
+    switch (status) {
+        case 'confirmed': return 'bg-blue-100 text-blue-700';
+        case 'preparing': return 'bg-amber-100 text-amber-700';
+        case 'ready': return 'bg-green-100 text-green-700';
+        case 'delivered': return 'bg-purple-100 text-purple-700';
+        case 'cancelled': return 'bg-gray-100 text-gray-500';
+        default: return 'bg-gray-100 text-gray-700';
+    }
+}
+
+function getSimpleStatusLabel(status: string, reviewState: string, lang: string = 'en'): string {
+    if (reviewState === 'needs_manual_review') {
+        return lang === 'hi' ? '⚠️ ज़रा देखें' : lang === 'te' ? '⚠️ చూద్దా' : '⚠️ Needs Review';
+    }
+    if (reviewState === 'awaiting_customer_choice') {
+        return lang === 'hi' ? '⏳ ग्राहक से बात' : lang === 'te' ? '⏳ వాటి చెప్పు' : '⏳ Awaiting Choice';
+    }
+    switch (status) {
+        case 'received': 
+            return lang === 'hi' ? '📩 नया ऑर्डर' : lang === 'te' ? '📩 కొత్త ఆర్డర్' : '📩 New Order';
+        case 'confirmed': 
+            return lang === 'hi' ? '✅ तय है' : lang === 'te' ? '✅ నిర్ధారణ' : '✅ Confirmed';
+        case 'preparing': 
+            return lang === 'hi' ? '👨‍🍳 बन रहा है' : lang === 'te' ? '👨‍🍳 తయారు' : '👨‍🍳 Preparing';
+        case 'ready': 
+            return lang === 'hi' ? '📦 तैयार' : lang === 'te' ? '📦 సిద్ధం' : '📦 Ready';
+        case 'delivered': 
+            return lang === 'hi' ? '🚚 दे दिया' : lang === 'te' ? '🚚 డెలివర్' : '🚚 Delivered';
+        case 'cancelled': 
+            return lang === 'hi' ? '❌ रद्द' : lang === 'te' ? '❌రద్దు' : '❌ Cancelled';
+        default: return status;
+    }
+}
+
 export default function WhatsAppPage() {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const { addToast } = useToast();
     const [orders, setOrders] = useState<WhatsAppOrder[]>([]);
     const [events, setEvents] = useState<LiveEvent[]>([]);
@@ -201,11 +238,11 @@ export default function WhatsAppPage() {
     const handleStatusUpdate = async (orderId: string, status: WhatsAppOrder['status']) => {
         try {
             setUpdatingId(orderId);
-            const res = await whatsappApi.updateOrderStatus(orderId, status);
-            setOrders((prev) => prev.map((order) => order._id === orderId ? res.data : order));
-            addToast(`Order marked ${status}`, 'success');
+            await whatsappApi.updateOrderStatus(orderId, status);
+            setOrders((prev) => prev.map((order) => order._id === orderId ? { ...order, status } : order));
+            addToast(status === 'ready' ? '✅ Order Ready!' : status === 'delivered' ? '✅ Delivered!' : 'Updated!', 'success');
         } catch (error: any) {
-            addToast(error.response?.data?.message || 'Failed to update order status', 'error');
+            addToast('Failed to update', 'error');
             addDiagnostic('updateOrderStatus', error);
         } finally {
             setUpdatingId(null);
@@ -354,13 +391,6 @@ export default function WhatsAppPage() {
 
     const activeOrder = useMemo(() => translatedOrders.find(o => o._id === selectedOrderId) || null, [translatedOrders, selectedOrderId]);
 
-    const queueCounts = useMemo(() => {
-        const needsReview = translatedOrders.filter((order) => isOrderNeedsReview(order)).length;
-        const awaitingChoice = translatedOrders.filter((order) => isOrderAwaitingChoice(order)).length;
-        const readyToBill = translatedOrders.filter((order) => isOrderReadyToBill(order)).length;
-        return { needsReview, awaitingChoice, readyToBill };
-    }, [translatedOrders]);
-
     const filteredOrders = useMemo(() => {
         let result = translatedOrders;
         if (activeFilter === 'needs_review') result = translatedOrders.filter((order) => isOrderNeedsReview(order));
@@ -375,55 +405,46 @@ export default function WhatsAppPage() {
         }
     }, [filteredOrders, selectedOrderId]);
 
-    const todayRevenuePotential = useMemo(
-        () => orders.filter((order) => order.status !== 'cancelled').reduce((sum, order) => sum + order.totalAmount, 0),
-        [orders]
-    );
-
     return (
-        <div className="flex flex-col h-[calc(100vh-100px)] -mt-2 space-y-4">
+        <div className="flex flex-col h-[calc(100vh-100px)] -mt-2 space-y-3 px-2 sm:px-0">
             {/* Minimal Header Stats */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                    <div className="bg-primary-green p-2.5 rounded-2xl text-white shadow-lg shadow-green-100">
-                        <MessageCircle size={24} />
+                    <div className="bg-primary-green p-2 sm:p-2.5 rounded-xl sm:rounded-2xl text-white shadow-lg shadow-green-100">
+                        <MessageCircle size={20} className="sm:w-6 sm:h-6" />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-black text-gray-900 leading-tight">WhatsApp Desk</h2>
+                        <h2 className="text-xl sm:text-2xl font-black text-gray-900 leading-tight">{t['WhatsApp Desk'] || 'WhatsApp Desk'}</h2>
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{analytics.ordersToday} {t['Orders Today'] || 'Orders Today'}</p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <div className="hidden md:flex items-center gap-2 bg-white px-4 py-2 rounded-2xl shadow-sm border border-gray-100">
-                        <RefreshCcw size={14} className={`text-gray-400 ${loading ? 'animate-spin' : ''}`} />
-                        <span className="text-xs font-bold text-gray-600">₹{todayRevenuePotential.toLocaleString()} Potential</span>
-                    </div>
+                <div className="flex items-center gap-2">
                     <button
                         onClick={handleSendReminders}
                         disabled={sendingReminder}
-                        className="bg-white border border-gray-100 text-gray-700 font-bold px-4 py-2.5 rounded-2xl shadow-sm hover:bg-gray-50 flex items-center gap-2 text-sm transition-all"
+                        className="bg-white border border-gray-100 text-gray-700 font-bold px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl shadow-sm hover:bg-gray-50 flex items-center gap-2 text-xs sm:text-sm transition-all"
                     >
-                        {sendingReminder ? <Activity size={16} className="animate-spin" /> : <Bell size={16} className="text-primary-green" />}
-                        {sendingReminder ? 'Sending...' : 'Broadcast Reminders'}
+                        {sendingReminder ? <Activity size={14} className="sm:w-4 sm:h-4 animate-spin" /> : <Bell size={14} className="sm:w-4 sm:h-4 text-primary-green" />}
+                        <span className="hidden sm:inline">{sendingReminder ? 'Sending...' : 'Broadcast'}</span>
                     </button>
                     <button
                         onClick={loadDashboard}
-                        className="bg-primary-green text-white font-bold px-4 py-2.5 rounded-2xl shadow-lg shadow-green-100 hover:scale-105 transition-all flex items-center gap-2 text-sm"
+                        className="bg-primary-green text-white font-bold px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl shadow-lg shadow-green-100 hover:scale-105 transition-all flex items-center gap-2 text-xs sm:text-sm"
                     >
-                        <RefreshCcw size={16} />
+                        <RefreshCcw size={14} className="sm:w-4 sm:h-4" />
                     </button>
                 </div>
             </div>
 
             {/* Main Messaging Desk */}
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6 overflow-hidden min-h-0">
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-3 lg:gap-6 overflow-hidden min-h-0">
 
                 {/* Left: Conversation List */}
-                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col min-h-0 overflow-hidden">
-                    <div className="p-6 border-b border-gray-50 bg-gray-50/30">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-black text-gray-900 uppercase tracking-tight">{t['Conversations'] || 'Conversations'}</h3>
+                <div className="bg-white rounded-2xl lg:rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col min-h-0 overflow-hidden">
+                    <div className="p-3 sm:p-6 border-b border-gray-50 bg-gray-50/30">
+                        <div className="flex items-center justify-between mb-3 sm:mb-4">
+                            <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm sm:text-base">{t['Conversations'] || 'Conversations'}</h3>
                             <span className="bg-primary-green/10 text-primary-green text-[10px] font-black px-2 py-0.5 rounded-full">
                                 {filteredOrders.length} ACTIVE
                             </span>
@@ -436,49 +457,44 @@ export default function WhatsAppPage() {
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
+                    <div className="flex-1 overflow-y-auto p-2 sm:p-4 space-y-2 scrollbar-hide">
                         {loading && orders.length === 0 ? (
-                            <div className="py-20 text-center space-y-4">
-                                <div className="animate-spin w-8 h-8 border-4 border-primary-green border-t-transparent rounded-full mx-auto" />
-                                <p className="text-sm font-bold text-gray-400">Loading orders...</p>
+                            <div className="py-12 sm:py-20 text-center space-y-4">
+                                <div className="animate-spin w-8 h-8 sm:w-10 sm:h-10 border-4 border-primary-green border-t-transparent rounded-full mx-auto" />
+                                <p className="text-sm sm:text-base font-bold text-gray-400">{t['Loading...'] || 'Loading...'}</p>
                             </div>
                         ) : filteredOrders.length === 0 ? (
-                            <div className="py-20 text-center opacity-40">
-                                <ShoppingBag size={48} className="mx-auto mb-4" />
-                                <p className="text-sm font-bold">No orders found</p>
+                            <div className="py-12 sm:py-20 text-center opacity-50">
+                                <ShoppingBag size={40} className="mx-auto mb-3 sm:mb-4 text-gray-300" />
+                                <p className="text-sm sm:text-base font-bold">{t['No orders yet'] || 'No orders yet'}</p>
                             </div>
                         ) : (
                             filteredOrders.map((order) => (
                                 <button
                                     key={order._id}
                                     onClick={() => setSelectedOrderId(order._id)}
-                                    className={`w-full text-left p-4 rounded-3xl border transition-all flex items-center gap-4 ${selectedOrderId === order._id
-                                        ? 'bg-green-50/50 border-primary-green/20 shadow-md ring-1 ring-primary-green/10'
-                                        : 'bg-white border-transparent hover:bg-gray-50'
+                                    className={`w-full text-left p-3 sm:p-5 rounded-xl sm:rounded-2xl border-2 transition-all flex items-center gap-3 sm:gap-4 ${selectedOrderId === order._id
+                                        ? 'bg-green-50 border-green-400 shadow-lg'
+                                        : 'bg-white border-gray-100 hover:border-green-200 hover:bg-green-25'
                                         }`}
                                 >
-                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black ${selectedOrderId === order._id ? 'bg-primary-green text-white' : 'bg-gray-100 text-gray-400'
+                                    {/* Large avatar */}
+                                    <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center text-lg sm:text-2xl font-black ${selectedOrderId === order._id ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500'
                                         }`}>
-                                        {(order.customerId?.name || 'C')[0].toUpperCase()}
+                                        {(order.customerId?.name || order.customerPhone || 'C')[0].toUpperCase()}
                                     </div>
+                                    
+                                    {/* Order Info - BIG and CLEAR */}
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-start">
-                                            <p className="font-bold text-gray-900 truncate">{order.customerId?.name || order.customerPhone}</p>
-                                            <span className="text-[10px] text-gray-400 font-bold whitespace-nowrap ml-2">
-                                                {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
+                                        <div className="flex justify-between items-center">
+                                            <p className="font-bold text-gray-900 truncate text-sm sm:text-lg">{order.customerId?.name || order.customerPhone}</p>
+                                            <span className="text-sm sm:text-lg font-black text-green-600">₹{order.totalAmount.toFixed(0)}</span>
                                         </div>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            {order.channel === 'whatsapp_audio' ? <Mic size={12} className="text-primary-green" /> : <MessageCircle size={12} className="text-gray-400" />}
-                                            <p className="text-xs text-gray-500 truncate">{order.parsedText || order.customerMessage}</p>
-                                        </div>
-                                        <div className="flex items-center gap-2 mt-2">
-                                            {isOrderNeedsReview(order) && <div className="w-2 h-2 rounded-full bg-amber-400" />}
-                                            {isOrderAwaitingChoice(order) && <div className="w-2 h-2 rounded-full bg-blue-400" />}
-                                            {isOrderReadyToBill(order) && <div className="w-2 h-2 rounded-full bg-emerald-400" />}
-                                            <span className="text-[10px] font-black uppercase text-gray-400 tracking-tighter">
-                                                Rs.{order.totalAmount.toFixed(0)} • {order.status}
-                                            </span>
+                                        
+                                        {/* Status badge - LARGE and COLORFUL */}
+                                        <div className={`inline-flex items-center gap-1 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-xs sm:text-sm font-bold mt-1 sm:mt-2 ${getSimpleStatusColor(order.status || 'confirmed', order.reviewState || 'none')}`}>
+                                            {order.channel === 'whatsapp_audio' && '🎤 '}
+                                            {getSimpleStatusLabel(order.status || 'confirmed', order.reviewState || 'none', language)}
                                         </div>
                                     </div>
                                 </button>
@@ -488,128 +504,128 @@ export default function WhatsAppPage() {
                 </div>
 
                 {/* Right: Active Detail Panel */}
-                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col overflow-hidden min-h-0">
+                <div className="bg-white rounded-2xl lg:rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col overflow-hidden min-h-0">
                     {activeOrder ? (
                         <>
                             {/* Detail Panel Header */}
-                            <div className="px-8 py-6 border-b border-gray-50 bg-gray-50/20 flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-14 h-14 rounded-2xl bg-primary-green text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-green-100">
+                            <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-gray-50 bg-gray-50/20 flex items-center justify-between flex-wrap gap-3">
+                                <div className="flex items-center gap-3 sm:gap-4">
+                                    <div className="w-10 sm:w-14 h-10 sm:h-14 rounded-xl sm:rounded-2xl bg-primary-green text-white flex items-center justify-center text-lg sm:text-2xl font-black shadow-lg shadow-green-100">
                                         {(activeOrder.customerId?.name || 'C')[0].toUpperCase()}
                                     </div>
                                     <div>
-                                        <h3 className="text-xl font-black text-gray-900">{activeOrder.customerId?.name || activeOrder.customerPhone}</h3>
+                                        <h3 className="text-base sm:text-xl font-black text-gray-900">{activeOrder.customerId?.name || activeOrder.customerPhone}</h3>
                                         <p className="text-xs font-bold text-gray-400 flex items-center gap-2">
                                             <span className="text-primary-green uppercase tracking-widest">{activeOrder.referenceCode || activeOrder._id.slice(-6).toUpperCase()}</span>
                                             {activeOrder.customerPhone}
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <div className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest ${statusClasses[activeOrder.status]}`}>
+                                <div className="flex items-center gap-2 sm:gap-3">
+                                    <div className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-widest ${statusClasses[activeOrder.status]}`}>
                                         {activeOrder.status}
                                     </div>
                                     <button
                                         onClick={() => handleConvertToBill(activeOrder._id)}
                                         disabled={convertingId === activeOrder._id || Boolean(activeOrder.convertedBillId) || editingOrderId === activeOrder._id || !isOrderReadyToBill(activeOrder)}
-                                        className="bg-primary-green text-white px-6 py-2.5 rounded-2xl text-sm font-black shadow-lg shadow-green-100 transition-all hover:scale-105 disabled:opacity-50 disabled:scale-100"
+                                        className="bg-primary-green text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-black shadow-lg shadow-green-100 transition-all hover:scale-105 disabled:opacity-50 disabled:scale-100"
                                     >
-                                        {activeOrder.convertedBillId ? 'BILL GENERATED' : convertingId === activeOrder._id ? 'CONVERTING...' : 'CREATE BILL NOW'}
+                                        {activeOrder.convertedBillId ? 'BILL' : convertingId === activeOrder._id ? '...' : 'CREATE BILL'}
                                     </button>
                                 </div>
                             </div>
 
                             {/* Detail Panel Body */}
-                            <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-hide">
+                            <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8 scrollbar-hide">
 
                                 {/* Raw Message Context */}
                                 <div className="space-y-3">
-                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">{t['Customer Request'] || 'Customer Request'}</h4>
-                                    <div className="max-w-[85%] bg-gray-50 rounded-[2rem] rounded-tl-none p-5 border border-gray-100 relative">
+                                    <h4 className="text-[10px] sm:text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">{t['Customer Request'] || 'Customer Request'}</h4>
+                                    <div className="max-w-[85%] bg-gray-50 rounded-2xl sm:rounded-[2rem] rounded-tl-none p-4 sm:p-5 border border-gray-100 relative">
                                         <div className="absolute top-0 left-[-8px] border-[8px] border-transparent border-t-gray-50 border-r-gray-50" />
-                                        <p className="text-gray-800 font-medium leading-relaxed">{activeOrder.customerMessage}</p>
+                                        <p className="text-gray-800 font-medium leading-relaxed text-sm sm:text-base">{activeOrder.customerMessage}</p>
                                         {activeOrder.channel === 'whatsapp_audio' && activeOrder.mediaUrl && (
-                                            <div className="mt-4 pt-4 border-t border-gray-200/60">
+                                            <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-200/60">
                                                 {orderMediaUrls[activeOrder._id] ? (
                                                     <audio controls src={orderMediaUrls[activeOrder._id]} className="w-full h-10" />
                                                 ) : (
                                                     <button
                                                         onClick={() => handleLoadVoiceNote(activeOrder)}
                                                         disabled={loadingMediaId === activeOrder._id}
-                                                        className="flex items-center gap-3 bg-white border border-gray-200 px-4 py-2 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50"
+                                                        className="flex items-center gap-3 bg-white border border-gray-200 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-gray-700 hover:bg-gray-50"
                                                     >
-                                                        <Mic size={16} className="text-primary-green" />
-                                                        {loadingMediaId === activeOrder._id ? 'FETCHING AUDIO...' : 'PLAY VOICE NOTE'}
+                                                        <Mic size={14} className="text-primary-green" />
+                                                        {loadingMediaId === activeOrder._id ? '...' : 'PLAY VOICE'}
                                                     </button>
                                                 )}
                                             </div>
                                         )}
                                     </div>
                                     {activeOrder.parsedText && activeOrder.parsedText !== activeOrder.customerMessage && (
-                                        <div className="max-w-[85%] ml-auto bg-green-50/50 rounded-[2rem] rounded-tr-none p-5 border border-green-100/50 relative">
+                                        <div className="max-w-[85%] ml-auto bg-green-50/50 rounded-2xl sm:rounded-[2rem] rounded-tr-none p-4 sm:p-5 border border-green-100/50 relative">
                                             <p className="text-[10px] font-black uppercase text-primary-green/60 mb-1">{t['SDukaan AI Parsing'] || 'SDukaan AI Parsing'}</p>
-                                            <p className="text-gray-800 font-medium leading-relaxed italic">{activeOrder.parsedText}</p>
+                                            <p className="text-gray-800 font-medium leading-relaxed italic text-sm sm:text-base">{activeOrder.parsedText}</p>
                                         </div>
                                     )}
                                 </div>
 
                                 {/* Order Items Control */}
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between px-1">
+                                <div className="space-y-3 sm:space-y-4">
+                                    <div className="flex items-center justify-between px-1 flex-wrap gap-2">
                                         <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t['Parsed Order Items'] || 'Parsed Order Items'}</h4>
                                         <button
                                             onClick={() => editingOrderId === activeOrder._id ? cancelEditingItems(activeOrder._id) : startEditingItems(activeOrder)}
-                                            className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded-xl transition-all ${editingOrderId === activeOrder._id
+                                            className={`text-[10px] sm:text-xs font-black uppercase tracking-widest px-2 sm:px-3 py-1.5 rounded-xl transition-all ${editingOrderId === activeOrder._id
                                                 ? 'bg-rose-50 text-rose-500'
                                                 : 'bg-green-50 text-primary-green shadow-sm'
                                                 }`}
                                         >
-                                            {editingOrderId === activeOrder._id ? 'CANCEL EDIT' : 'MODIFY ITEMS'}
+                                            {editingOrderId === activeOrder._id ? 'CANCEL' : 'MODIFY'}
                                         </button>
                                     </div>
 
                                     {editingOrderId === activeOrder._id ? (
-                                        <div className="rounded-3xl border border-dashed border-gray-200 p-6 space-y-4 bg-gray-50/30">
+                                        <div className="rounded-2xl sm:rounded-3xl border border-dashed border-gray-200 p-4 sm:p-6 space-y-4 bg-gray-50/30">
                                             <div className="space-y-3">
                                                 {(draftItemsByOrder[activeOrder._id] || []).map((item) => (
                                                     <div key={item.productId} className="bg-white p-3 rounded-2xl border border-gray-100 flex items-center justify-between shadow-sm">
-                                                        <span className="font-bold text-gray-800">{item.name}</span>
-                                                        <div className="flex items-center gap-3">
+                                                        <span className="font-bold text-gray-800 text-sm">{item.name}</span>
+                                                        <div className="flex items-center gap-2 sm:gap-3">
                                                             <input
                                                                 type="number"
                                                                 min={1}
                                                                 value={item.quantity}
                                                                 onChange={(e) => updateDraftItemQuantity(activeOrder._id, item.productId, Number(e.target.value))}
-                                                                className="w-16 bg-gray-50 border border-gray-100 rounded-lg px-2 py-1 text-center font-bold outline-none focus:ring-2 focus:ring-green-100"
+                                                                className="w-12 sm:w-16 bg-gray-50 border border-gray-100 rounded-lg px-2 py-1 text-center font-bold outline-none focus:ring-2 focus:ring-green-100 text-sm"
                                                             />
                                                             <button
                                                                 onClick={() => removeDraftItem(activeOrder._id, item.productId)}
                                                                 className="p-1.5 rounded-lg text-rose-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
                                                             >
-                                                                <X size={16} />
+                                                                <X size={14} />
                                                             </button>
                                                         </div>
                                                     </div>
                                                 ))}
                                             </div>
-                                            <div className="grid grid-cols-[1fr_auto_auto] gap-2 pt-2">
+                                            <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_auto_auto] gap-2 pt-2">
                                                 <select
                                                     value={newProductByOrder[activeOrder._id] || ''}
                                                     onChange={(e) => setNewProductByOrder((prev) => ({ ...prev, [activeOrder._id]: e.target.value }))}
-                                                    className="bg-white px-4 rounded-xl border border-gray-100 outline-none text-sm font-bold truncate"
+                                                    className="bg-white px-3 sm:px-4 rounded-xl border border-gray-100 outline-none text-xs sm:text-sm font-bold truncate"
                                                 >
-                                                    <option value="">Add more products...</option>
+                                                    <option value="">Add products...</option>
                                                     {translatedProducts.map((p) => (
                                                         <option key={p._id} value={p._id}>{p.name} ({p.stock})</option>
                                                     ))}
                                                 </select>
-                                                <button onClick={() => addDraftItem(activeOrder._id)} className="p-3 bg-gray-900 text-white rounded-xl hover:bg-black">
-                                                    <Plus size={18} />
+                                                <button onClick={() => addDraftItem(activeOrder._id)} className="p-2 sm:p-3 bg-gray-900 text-white rounded-xl hover:bg-black">
+                                                    <Plus size={16} />
                                                 </button>
                                                 <button
                                                     onClick={() => saveEditedItems(activeOrder._id)}
                                                     disabled={savingItemsId === activeOrder._id}
-                                                    className="px-6 bg-primary-green text-white font-black text-sm rounded-xl shadow-lg shadow-green-100 flex items-center gap-2"
+                                                    className="hidden sm:flex px-6 bg-primary-green text-white font-black text-sm rounded-xl shadow-lg shadow-green-100 items-center gap-2"
                                                 >
                                                     <Save size={16} /> SAVE
                                                 </button>
@@ -633,18 +649,18 @@ export default function WhatsAppPage() {
                                 </div>
 
                                 {/* Order Bottom Actions */}
-                                <div className="pt-6 border-t border-gray-50 flex items-center justify-between">
+                                <div className="pt-4 sm:pt-6 border-t border-gray-50 flex items-center justify-between flex-wrap gap-4">
                                     <div>
-                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-300 mb-1">TOTAL POTENTIAL</p>
-                                        <p className="text-4xl font-black text-primary-green">Rs.{activeOrder.totalAmount.toFixed(0)}</p>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-300 mb-1">TOTAL</p>
+                                        <p className="text-3xl sm:text-4xl font-black text-primary-green">₹{activeOrder.totalAmount.toFixed(0)}</p>
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex gap-2 flex-wrap">
                                         {statusOptions.map((status) => (
                                             <button
                                                 key={status}
                                                 onClick={() => handleStatusUpdate(activeOrder._id, status)}
                                                 disabled={updatingId === activeOrder._id || activeOrder.status === status}
-                                                className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeOrder.status === status
+                                                className={`px-3 sm:px-4 py-2 rounded-xl sm:rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeOrder.status === status
                                                     ? 'bg-gray-900 text-white shadow-lg'
                                                     : 'bg-white border border-gray-100 text-gray-400 hover:bg-gray-50'
                                                     } disabled:opacity-50`}
@@ -657,19 +673,19 @@ export default function WhatsAppPage() {
                             </div>
                         </>
                     ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center p-12 opacity-30 select-none">
-                            <div className="w-32 h-32 bg-gray-50 rounded-full flex items-center justify-center mb-6">
-                                <MessageCircle size={64} className="text-gray-300" />
+                        <div className="flex-1 flex flex-col items-center justify-center text-center p-6 sm:p-12 opacity-30 select-none">
+                            <div className="w-24 sm:w-32 h-24 sm:h-32 bg-gray-50 rounded-full flex items-center justify-center mb-4 sm:mb-6">
+                                <MessageCircle size={48} className="sm:w-16 sm:h-16 text-gray-300" />
                             </div>
-                            <h3 className="text-2xl font-black text-gray-900">Desk Idle</h3>
-                            <p className="max-w-xs mt-2 text-sm font-medium">Select a conversation from the left to start billing or review items.</p>
+                            <h3 className="text-xl sm:text-2xl font-black text-gray-900">{t['Desk Idle'] || 'Desk Idle'}</h3>
+                            <p className="max-w-xs mt-2 text-sm font-medium">{t['Select a conversation to start'] || 'Select a conversation to start'}</p>
                         </div>
                     )}
                 </div>
             </div>
 
             {/* Hidden/Desktop Rules & Diagnostics Overlay (Minimalist) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="hidden md:grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white/50 backdrop-blur-sm rounded-3xl p-4 border border-gray-100 flex items-start gap-4">
                     <Activity size={24} className="text-gray-300 mt-1" />
                     <div>
@@ -699,20 +715,6 @@ export default function WhatsAppPage() {
     );
 }
 
-function StatCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-    return (
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-            <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 bg-green-50 text-primary-green rounded-lg">
-                    {icon}
-                </div>
-                <span className="text-gray-500 text-[11px] font-black uppercase tracking-wider">{label}</span>
-            </div>
-            <div className="text-2xl font-black text-gray-900">{value}</div>
-        </div>
-    );
-}
-
 function FilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
     return (
         <button
@@ -724,19 +726,6 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
         >
             {label}
         </button>
-    );
-}
-
-function ReviewBadge({ text, tone }: { text: string; tone: 'amber' | 'blue' | 'green' }) {
-    const tones = {
-        amber: 'bg-amber-100 text-amber-700',
-        blue: 'bg-blue-100 text-blue-700',
-        green: 'bg-green-100 text-green-700'
-    };
-    return (
-        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${tones[tone]}`}>
-            {text}
-        </span>
     );
 }
 
