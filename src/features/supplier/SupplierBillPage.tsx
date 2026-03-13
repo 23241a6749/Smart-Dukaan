@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, Check, Loader2, X, Scan, Save, Plus, History, FileText, Calendar } from 'lucide-react';
+import { Camera, Check, Loader2, X, Scan, Save, Plus, History, FileText, Calendar, Package, CalendarDays } from 'lucide-react';
 import Tesseract from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
-import { supplierBillApi } from '../../services/api';
+import { supplierBillApi, productApi } from '../../services/api';
+import { useToast } from '../../contexts/ToastContext';
 
 // Worker configuration for PDF.js
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -13,13 +14,34 @@ interface LineItem {
     quantity: number;
     unit: string;
     totalAmount: number;
-    costPrice: number; // Read-only, calculated
-    sellingPrice: number; // Editable
-    isMatched?: boolean; // From backend response
+    costPrice: number;
+    sellingPrice: number;
+    isMatched?: boolean;
     matchScore?: number;
 }
 
+const CATEGORIES = [
+    'Grocery', 'Dairy', 'Bakery', 'Beverages', 'Snacks',
+    'Fruits & Vegetables', 'Meat & Seafood', 'Frozen Foods',
+    'Personal Care', 'Household', 'Stationery', 'Electronics', 'Other'
+];
+
+const UNITS = [
+    { value: 'piece', label: 'Piece (pc)' },
+    { value: 'kg', label: 'Kilogram (kg)' },
+    { value: 'litre', label: 'Litre (L)' },
+    { value: 'g', label: 'Gram (g)' },
+    { value: 'ml', label: 'Millilitre (ml)' },
+    { value: 'pack', label: 'Pack' },
+    { value: 'dozen', label: 'Dozen' },
+];
+
+const emptyProduct = { name: '', price: 0, stock: 0, minStock: 5, category: '', icon: '📦', unit: 'piece', expiryDate: '' };
+
 export const SupplierBillPage: React.FC = () => {
+    const { addToast } = useToast();
+
+    // OCR / scan state
     const [file, setFile] = useState<File | null>(null);
     const [_previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -30,8 +52,14 @@ export const SupplierBillPage: React.FC = () => {
     const [showScanner, setShowScanner] = useState(true);
     const [activeTab, setActiveTab] = useState<'scan' | 'manual' | 'history'>('scan');
     const [history, setHistory] = useState<any[]>([]);
-
     const [selectedBill, setSelectedBill] = useState<any | null>(null);
+
+    // Manual product dialog state
+    const [showProductDialog, setShowProductDialog] = useState(false);
+    const [savingProduct, setSavingProduct] = useState(false);
+    const [productForm, setProductForm] = useState({ ...emptyProduct });
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (activeTab === 'history') {
@@ -48,6 +76,29 @@ export const SupplierBillPage: React.FC = () => {
         }
     };
 
+    // ─── Manual product dialog handlers ──────────────────────────────────────
+    const handleSaveProduct = async () => {
+        if (!productForm.name || productForm.price <= 0 || productForm.stock < 0) {
+            addToast('Please fill all required fields correctly', 'error');
+            return;
+        }
+        setSavingProduct(true);
+        try {
+            await productApi.create(productForm as any);
+            addToast(`"${productForm.name}" added to inventory!`, 'success');
+            setProductForm({ ...emptyProduct });
+            setShowProductDialog(false);
+        } catch (err) {
+            console.error('Failed to add product', err);
+            addToast('Failed to add product. Please try again.', 'error');
+        } finally {
+            setSavingProduct(false);
+        }
+    };
+
+    const setField = (k: string, v: any) => setProductForm(prev => ({ ...prev, [k]: v }));
+
+    // ─── OCR / scan handlers ──────────────────────────────────────────────────
     const handleManualAdd = () => {
         const newItem: LineItem = {
             id: Math.random().toString(36).substr(2, 9),
@@ -62,8 +113,6 @@ export const SupplierBillPage: React.FC = () => {
         setShowScanner(false);
     };
 
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             handleFile(e.target.files[0]);
@@ -73,14 +122,12 @@ export const SupplierBillPage: React.FC = () => {
     const handleFile = async (selectedFile: File) => {
         setFile(selectedFile);
         setShowScanner(false);
-
-        // Preview
         if (selectedFile.type.startsWith('image/')) {
             const url = URL.createObjectURL(selectedFile);
             setPreviewUrl(url);
             processImage(url);
         } else if (selectedFile.type === 'application/pdf') {
-            setPreviewUrl(null); // No preview for PDF yet (or render first page)
+            setPreviewUrl(null);
             processPdf(selectedFile);
         }
     };
@@ -89,23 +136,17 @@ export const SupplierBillPage: React.FC = () => {
         setIsProcessing(true);
         setStatusText('Initializing OCR...');
         setProgress(0);
-
         try {
-            const result = await Tesseract.recognize(
-                url,
-                'eng',
-                {
-                    logger: m => {
-                        if (m.status === 'recognizing text') {
-                            setProgress(Math.round(m.progress * 100));
-                            setStatusText(`Scanning... ${Math.round(m.progress * 100)}%`);
-                        } else {
-                            setStatusText(m.status);
-                        }
+            const result = await Tesseract.recognize(url, 'eng', {
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        setProgress(Math.round(m.progress * 100));
+                        setStatusText(`Scanning... ${Math.round(m.progress * 100)}%`);
+                    } else {
+                        setStatusText(m.status);
                     }
                 }
-            );
-
+            });
             parseBillText(result.data.text);
         } catch (err) {
             console.error('OCR Error', err);
@@ -118,18 +159,15 @@ export const SupplierBillPage: React.FC = () => {
     const processPdf = async (pdfFile: File) => {
         setIsProcessing(true);
         setStatusText('Processing PDF...');
-
         try {
             const arrayBuffer = await pdfFile.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            const page = await pdf.getPage(1); // Only first page for now
-
+            const page = await pdf.getPage(1);
             const viewport = page.getViewport({ scale: 2 });
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
-
             if (context) {
                 await page.render({ canvasContext: context, viewport } as any).promise;
                 const imageUrl = canvas.toDataURL('image/png');
@@ -144,36 +182,22 @@ export const SupplierBillPage: React.FC = () => {
     };
 
     const parseBillText = (text: string) => {
-        // Basic Parsing Logic for standard formats
-        // Looking for lines with: [Name] [Qty] [Unit]? [Price]? [Total]
-        // Regex is tricky, so we'll use heuristic line iteration
-
         const lines = text.split('\n');
         const items: LineItem[] = [];
-
         const qtyRegex = /(\d+(\.\d+)?)\s*(kg|g|gm|ltr|litre|ml|pc|pcs|pkt|packet)/i;
 
         lines.forEach((line) => {
-            // Cleaning
             const cleanLine = line.trim();
             if (cleanLine.length < 5) return;
-
-            // Skip header lines
             if (/total|subtotal|gst|tax|amount/i.test(cleanLine) && cleanLine.length < 20) return;
 
-            // Try to find quantity+unit
             const qtyMatch = cleanLine.match(qtyRegex);
-
-            // Try to find prices (assuming last number is total)
             const numbers = cleanLine.match(/(\d+(\.\d+)?)/g)?.map(Number) || [];
 
             if (qtyMatch && numbers.length >= 2) {
-                // High confidence line
                 const quantity = parseFloat(qtyMatch[1]);
                 const unit = qtyMatch[3];
-                const totalAmount = numbers[numbers.length - 1]; // Assume last number is total matching bill convention
-
-                // Construct Name: Everything before quantity?
+                const totalAmount = numbers[numbers.length - 1];
                 const namePart = cleanLine.substring(0, qtyMatch.index).trim();
 
                 if (namePart && totalAmount > 0) {
@@ -185,14 +209,14 @@ export const SupplierBillPage: React.FC = () => {
                         unit,
                         totalAmount,
                         costPrice: Math.round(cost),
-                        sellingPrice: Math.round(cost * 1.05) // Default 5%
+                        sellingPrice: Math.round(cost * 1.05)
                     });
                 }
             }
         });
 
         if (items.length === 0) {
-            alert("Could not automatically detect items. Please add manually.");
+            alert('Could not automatically detect items. Please add manually.');
         }
         setLineItems(items);
     };
@@ -227,7 +251,6 @@ export const SupplierBillPage: React.FC = () => {
                     customSellingPrice: i.sellingPrice
                 }))
             };
-
             const res = await supplierBillApi.process(payload);
             setProcessingResult(res.data);
             setLineItems([]);
@@ -243,6 +266,7 @@ export const SupplierBillPage: React.FC = () => {
 
     return (
         <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8 pb-48">
+            {/* ── Header ── */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                     <div className="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-2xl text-blue-600 dark:text-blue-400">
@@ -250,10 +274,11 @@ export const SupplierBillPage: React.FC = () => {
                     </div>
                     <div>
                         <h2 className="text-3xl md:text-3xl font-black text-gray-900 dark:text-white tracking-tight">Supplier Bills</h2>
-                        <p className="text-gray-500 font-medium text-sm md:text-base">Digitize bills, update stock & track history</p>
+                        <p className="text-gray-500 font-medium text-sm md:text-base">Digitize bills, update stock &amp; track history</p>
                     </div>
                 </div>
 
+                {/* Tabs */}
                 <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
                     <button
                         onClick={() => { setActiveTab('scan'); setShowScanner(true); }}
@@ -262,7 +287,7 @@ export const SupplierBillPage: React.FC = () => {
                         Scan
                     </button>
                     <button
-                        onClick={() => { setActiveTab('manual'); if (lineItems.length === 0) handleManualAdd(); }}
+                        onClick={() => setActiveTab('manual')}
                         className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'manual' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-300'}`}
                     >
                         Manual
@@ -276,6 +301,7 @@ export const SupplierBillPage: React.FC = () => {
                 </div>
             </div>
 
+            {/* ── History Tab ── */}
             {activeTab === 'history' ? (
                 <div className="space-y-4">
                     {history.length === 0 ? (
@@ -286,7 +312,11 @@ export const SupplierBillPage: React.FC = () => {
                     ) : (
                         <div className="grid gap-4">
                             {history.map((bill) => (
-                                <div onClick={() => setSelectedBill(bill)} key={bill._id} className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-blue-200 transition-colors flex items-center justify-between group cursor-pointer">
+                                <div
+                                    onClick={() => setSelectedBill(bill)}
+                                    key={bill._id}
+                                    className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 hover:border-blue-200 transition-colors flex items-center justify-between group cursor-pointer"
+                                >
                                     <div className="flex items-center gap-4">
                                         <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl text-blue-600 dark:text-blue-400">
                                             <FileText size={24} />
@@ -311,8 +341,7 @@ export const SupplierBillPage: React.FC = () => {
                 </div>
             ) : (
                 <>
-                    {/* Reuse existing Processing/Result UI */}
-
+                    {/* ── Success Result ── */}
                     {processingResult ? (
                         <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/10 dark:to-emerald-900/10 border border-green-100 dark:border-green-800 rounded-[2.5rem] p-6 md:p-10 animate-in slide-in-from-bottom duration-500 shadow-xl shadow-green-500/5">
                             <div className="flex flex-col md:flex-row items-start md:items-center gap-5 mb-8">
@@ -353,6 +382,26 @@ export const SupplierBillPage: React.FC = () => {
                         </div>
                     ) : (
                         <>
+                            {/* ── Manual Tab: Add Product Dialog Trigger ── */}
+                            {activeTab === 'manual' && (
+                                <div className="flex flex-col items-center justify-center py-20 gap-6">
+                                    <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center">
+                                        <Package size={36} className="text-primary-green" />
+                                    </div>
+                                    <div className="text-center">
+                                        <h3 className="text-2xl font-black text-gray-900 dark:text-white">Add Product Manually</h3>
+                                        <p className="text-gray-500 font-medium mt-1 text-sm">Enter product details directly into inventory</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowProductDialog(true)}
+                                        className="bg-primary-green text-white px-8 py-3.5 rounded-2xl font-bold flex items-center gap-2.5 shadow-lg shadow-green-200 hover:brightness-105 hover:scale-105 transition-all active:scale-95"
+                                    >
+                                        <Plus size={20} /> Add Product Manually
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* ── Scan Tab: Drop Zone ── */}
                             {activeTab === 'scan' && showScanner && (
                                 <div
                                     className="border-4 border-dashed border-gray-200 dark:border-gray-700 rounded-[3rem] p-8 md:p-16 text-center bg-gray-50 dark:bg-gray-800/50 hover:bg-white dark:hover:bg-gray-800 hover:border-blue-400 dark:hover:border-blue-500 transition-all cursor-pointer group relative overflow-hidden"
@@ -372,11 +421,12 @@ export const SupplierBillPage: React.FC = () => {
                                             <Camera size={40} className="text-blue-500 dark:text-blue-400 md:w-12 md:h-12" />
                                         </div>
                                         <h3 className="text-2xl md:text-3xl font-black text-gray-900 dark:text-white mb-2 md:mb-3">Tap to Scan Bill</h3>
-                                        <p className="text-gray-500 dark:text-gray-400 font-bold text-sm md:text-lg">Support Camera, Image & PDF</p>
+                                        <p className="text-gray-500 dark:text-gray-400 font-bold text-sm md:text-lg">Support Camera, Image &amp; PDF</p>
                                     </div>
                                 </div>
                             )}
 
+                            {/* ── OCR Progress ── */}
                             {isProcessing && (
                                 <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] p-12 shadow-2xl border border-gray-100 dark:border-gray-700 text-center">
                                     <Loader2 className="animate-spin mx-auto text-primary-green mb-6" size={64} />
@@ -388,22 +438,16 @@ export const SupplierBillPage: React.FC = () => {
                                 </div>
                             )}
 
-                            {(!isProcessing && lineItems.length > 0 && (activeTab === 'manual' || (activeTab === 'scan' && file))) && (
+                            {/* ── Scanned Items Review Table ── */}
+                            {!isProcessing && lineItems.length > 0 && activeTab === 'scan' && file && (
                                 <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-700 animate-in fade-in duration-500">
                                     <div className="p-6 md:p-8 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50">
                                         <div>
-                                            <h3 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">
-                                                {activeTab === 'manual' ? 'Enter Items' : 'Review Items'}
-                                            </h3>
+                                            <h3 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white">Review Items</h3>
                                             <p className="text-gray-500 font-medium text-sm">{lineItems.length} items</p>
                                         </div>
                                         <button
-                                            onClick={() => {
-                                                setLineItems([]);
-                                                setShowScanner(true);
-                                                setFile(null);
-                                                setPreviewUrl(null);
-                                            }}
+                                            onClick={() => { setLineItems([]); setShowScanner(true); setFile(null); setPreviewUrl(null); }}
                                             className="bg-red-50 text-red-500 hover:bg-red-100 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors"
                                         >
                                             Clear All
@@ -458,9 +502,7 @@ export const SupplierBillPage: React.FC = () => {
                                                             />
                                                         </td>
                                                         <td className="p-4 md:p-6 text-right">
-                                                            <div className="text-gray-400 font-bold text-lg">
-                                                                ₹{item.costPrice}
-                                                            </div>
+                                                            <div className="text-gray-400 font-bold text-lg">₹{item.costPrice}</div>
                                                         </td>
                                                         <td className="p-4 md:p-6">
                                                             <div className="relative group-focus-within:scale-105 transition-transform max-w-[120px]">
@@ -474,7 +516,10 @@ export const SupplierBillPage: React.FC = () => {
                                                             </div>
                                                         </td>
                                                         <td className="p-4 md:p-6 text-center">
-                                                            <button onClick={() => handleRemoveItem(item.id)} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-300 hover:text-red-500 rounded-full transition-colors">
+                                                            <button
+                                                                onClick={() => handleRemoveItem(item.id)}
+                                                                className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-300 hover:text-red-500 rounded-full transition-colors"
+                                                            >
                                                                 <X size={20} />
                                                             </button>
                                                         </td>
@@ -504,7 +549,7 @@ export const SupplierBillPage: React.FC = () => {
                 </>
             )}
 
-            {/* Bill Details Modal */}
+            {/* ── Bill Details Modal ── */}
             {selectedBill && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-gray-800 rounded-[2rem] w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
@@ -548,6 +593,140 @@ export const SupplierBillPage: React.FC = () => {
                         <div className="p-6 md:p-8 border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 rounded-b-[2rem] flex justify-between items-center">
                             <span className="text-gray-500 font-bold">Total Amount</span>
                             <span className="text-2xl font-black text-gray-900 dark:text-white">₹{selectedBill.totalAmount.toLocaleString()}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Manual Product Entry Dialog ── */}
+            {showProductDialog && (
+                <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
+                        {/* Header */}
+                        <div className="flex justify-between items-center px-8 pt-7 pb-5 border-b border-gray-100">
+                            <div>
+                                <h3 className="text-2xl font-black text-gray-900">New Product</h3>
+                                <p className="text-gray-400 text-sm mt-0.5">Add a new item to your shop inventory</p>
+                            </div>
+                            <button
+                                onClick={() => { setShowProductDialog(false); setProductForm({ ...emptyProduct }); }}
+                                className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-400 transition-colors"
+                            >
+                                <X size={22} />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="overflow-y-auto px-8 py-6 space-y-5 flex-1">
+                            {/* Product Name */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Product Name</label>
+                                <div className="relative">
+                                    <Package className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Basmati Rice"
+                                        value={productForm.name}
+                                        onChange={(e) => setField('name', e.target.value)}
+                                        className="w-full bg-gray-50 border-2 border-transparent py-3 pl-11 pr-4 rounded-2xl font-bold text-gray-900 text-sm focus:border-primary-green focus:bg-white outline-none transition-all placeholder-gray-300"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Price & Stock */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Price (₹)</label>
+                                    <div className="relative">
+                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">₹</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={productForm.price}
+                                            onChange={(e) => setField('price', Number(e.target.value))}
+                                            className="w-full bg-gray-50 border-2 border-transparent py-3 pl-8 pr-4 rounded-2xl font-bold text-gray-900 text-sm focus:border-primary-green focus:bg-white outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Stock Count</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={productForm.stock}
+                                        onChange={(e) => setField('stock', Number(e.target.value))}
+                                        className="w-full bg-gray-50 border-2 border-transparent py-3 px-4 rounded-2xl font-bold text-gray-900 text-sm focus:border-primary-green focus:bg-white outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Min Stock & Unit */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Minimum Stock</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={productForm.minStock}
+                                        onChange={(e) => setField('minStock', Number(e.target.value))}
+                                        className="w-full bg-gray-50 border-2 border-transparent py-3 px-4 rounded-2xl font-bold text-gray-900 text-sm focus:border-primary-green focus:bg-white outline-none transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Unit</label>
+                                    <select
+                                        value={productForm.unit}
+                                        onChange={(e) => setField('unit', e.target.value)}
+                                        className="w-full bg-gray-50 border-2 border-transparent py-3 px-4 rounded-2xl font-bold text-gray-900 text-sm focus:border-primary-green focus:bg-white outline-none transition-all"
+                                    >
+                                        {UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Category */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Category</label>
+                                <select
+                                    value={productForm.category}
+                                    onChange={(e) => setField('category', e.target.value)}
+                                    className="w-full bg-gray-50 border-2 border-transparent py-3 px-4 rounded-2xl font-bold text-gray-900 text-sm focus:border-primary-green focus:bg-white outline-none transition-all"
+                                >
+                                    <option value="">Select a category...</option>
+                                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+
+                            {/* Expiry Date */}
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Expiry Date (optional)</label>
+                                <div className="relative">
+                                    <CalendarDays className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={16} />
+                                    <input
+                                        type="date"
+                                        value={productForm.expiryDate}
+                                        onChange={(e) => setField('expiryDate', e.target.value)}
+                                        className="w-full bg-gray-50 border-2 border-transparent py-3 pl-11 pr-4 rounded-2xl font-bold text-gray-900 text-sm focus:border-primary-green focus:bg-white outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-8 pb-7 pt-4 border-t border-gray-100 flex gap-3">
+                            <button
+                                onClick={() => { setShowProductDialog(false); setProductForm({ ...emptyProduct }); }}
+                                className="flex-1 py-3.5 rounded-2xl font-black text-gray-500 bg-gray-50 hover:bg-gray-100 transition-colors text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveProduct}
+                                disabled={savingProduct}
+                                className="flex-[2] bg-primary-green text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-green-200 hover:brightness-105 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
+                                {savingProduct ? 'Adding...' : 'Add to Inventory'}
+                            </button>
                         </div>
                     </div>
                 </div>
