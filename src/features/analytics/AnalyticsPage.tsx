@@ -283,6 +283,7 @@ export const AnalyticsPage: React.FC = () => {
 
     const revenueTrendData = Object.entries(trendMap)
       .map(([date, amount]) => ({ date, amount }))
+      .reverse()
       .slice(-7);
 
     const paymentMethodsData = Object.entries(payMap).map(([name, value]) => ({

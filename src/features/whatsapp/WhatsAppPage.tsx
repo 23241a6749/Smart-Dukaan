@@ -4,14 +4,9 @@ import {
     Activity,
     AlertTriangle,
     Bell,
-    Clock3,
-    Headphones,
     MessageCircle,
     Mic,
-    PackageCheck,
-    Pencil,
     Plus,
-    ReceiptText,
     RefreshCcw,
     Save,
     ShoppingBag,
@@ -20,6 +15,8 @@ import {
 
 import { productApi, whatsappApi, type WhatsAppOrder } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
+import { useTranslate } from '../../hooks/useTranslate';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5001';
 
@@ -92,9 +89,11 @@ function isOrderReadyToBill(order: WhatsAppOrder): boolean {
 }
 
 export default function WhatsAppPage() {
+    const { t } = useLanguage();
     const { addToast } = useToast();
     const [orders, setOrders] = useState<WhatsAppOrder[]>([]);
     const [events, setEvents] = useState<LiveEvent[]>([]);
+
     const [analytics, setAnalytics] = useState<DashboardAnalytics>(initialAnalytics);
     const [loading, setLoading] = useState(true);
     const [sendingReminder, setSendingReminder] = useState(false);
@@ -108,6 +107,10 @@ export default function WhatsAppPage() {
     const [newProductByOrder, setNewProductByOrder] = useState<Record<string, string>>({});
     const [activeFilter, setActiveFilter] = useState<OrderFilter>('all');
     const [orderMediaUrls, setOrderMediaUrls] = useState<Record<string, string>>({});
+
+    const translatedOrders = useTranslate(orders, ['customerMessage', 'parsedText', 'items.name']);
+    const translatedProducts = useTranslate(productOptions, ['name']);
+
     const [loadingMediaId, setLoadingMediaId] = useState<string | null>(null);
 
     const addDiagnostic = (source: string, error: any) => {
@@ -347,242 +350,303 @@ export default function WhatsAppPage() {
         }
     };
 
+    const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+
+    const activeOrder = useMemo(() => translatedOrders.find(o => o._id === selectedOrderId) || null, [translatedOrders, selectedOrderId]);
+
     const queueCounts = useMemo(() => {
-        const needsReview = orders.filter((order) => isOrderNeedsReview(order)).length;
-        const awaitingChoice = orders.filter((order) => isOrderAwaitingChoice(order)).length;
-        const readyToBill = orders.filter((order) => isOrderReadyToBill(order)).length;
+        const needsReview = translatedOrders.filter((order) => isOrderNeedsReview(order)).length;
+        const awaitingChoice = translatedOrders.filter((order) => isOrderAwaitingChoice(order)).length;
+        const readyToBill = translatedOrders.filter((order) => isOrderReadyToBill(order)).length;
         return { needsReview, awaitingChoice, readyToBill };
-    }, [orders]);
+    }, [translatedOrders]);
 
     const filteredOrders = useMemo(() => {
-        if (activeFilter === 'needs_review') return orders.filter((order) => isOrderNeedsReview(order));
-        if (activeFilter === 'awaiting_choice') return orders.filter((order) => isOrderAwaitingChoice(order));
-        if (activeFilter === 'ready_to_bill') return orders.filter((order) => isOrderReadyToBill(order));
-        return orders;
-    }, [orders, activeFilter]);
+        let result = translatedOrders;
+        if (activeFilter === 'needs_review') result = translatedOrders.filter((order) => isOrderNeedsReview(order));
+        else if (activeFilter === 'awaiting_choice') result = translatedOrders.filter((order) => isOrderAwaitingChoice(order));
+        else if (activeFilter === 'ready_to_bill') result = translatedOrders.filter((order) => isOrderReadyToBill(order));
+        return result;
+    }, [translatedOrders, activeFilter]);
+
+    useEffect(() => {
+        if (!selectedOrderId && filteredOrders.length > 0) {
+            setSelectedOrderId(filteredOrders[0]._id);
+        }
+    }, [filteredOrders, selectedOrderId]);
 
     const todayRevenuePotential = useMemo(
         () => orders.filter((order) => order.status !== 'cancelled').reduce((sum, order) => sum + order.totalAmount, 0),
         [orders]
     );
 
-    const orderCountLabel = activeFilter === 'all'
-        ? `${orders.length} total`
-        : `${filteredOrders.length} shown`;
-
     return (
-        <div className="space-y-6 pb-48">
-            <section className="relative overflow-hidden rounded-[2rem] border border-emerald-200/40 bg-gradient-to-br from-emerald-700 via-teal-700 to-slate-900 p-6 text-white shadow-2xl">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.16),transparent_28%)]" />
-                <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col h-[calc(100vh-100px)] -mt-2 space-y-4">
+            {/* Minimal Header Stats */}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="bg-primary-green p-2.5 rounded-2xl text-white shadow-lg shadow-green-100">
+                        <MessageCircle size={24} />
+                    </div>
                     <div>
-                        <p className="text-xs font-black uppercase tracking-[0.35em] text-emerald-100/90">WhatsApp Order Desk</p>
-                        <h1 className="mt-3 text-4xl font-black tracking-tight">Voice orders to billing in one lightweight MSME flow.</h1>
-                        <p className="mt-3 max-w-2xl text-sm text-emerald-50/90">
-                            Customers send text or voice notes, SDukaan handles ambiguity, and the shopkeeper confirms quickly with edit-first safety.
-                        </p>
-                    </div>
-
-                    <div className="flex flex-wrap gap-3">
-                        <button
-                            onClick={loadDashboard}
-                            className="inline-flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-bold backdrop-blur-md transition hover:bg-white/20"
-                        >
-                            <RefreshCcw size={16} /> Refresh
-                        </button>
-                        <button
-                            onClick={handleSendReminders}
-                            disabled={sendingReminder}
-                            className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-black text-emerald-900 shadow-xl transition hover:scale-[1.02] disabled:opacity-60"
-                        >
-                            {sendingReminder ? <Activity size={16} className="animate-spin" /> : <Bell size={16} />}
-                            {sendingReminder ? 'Sending...' : 'Send Due Reminders'}
-                        </button>
+                        <h2 className="text-2xl font-black text-gray-900 leading-tight">WhatsApp Desk</h2>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{analytics.ordersToday} {t['Orders Today'] || 'Orders Today'}</p>
                     </div>
                 </div>
 
-                <div className="relative z-10 mt-6 grid gap-3 md:grid-cols-4">
-                    <StatCard label="Orders Today" value={String(analytics.ordersToday)} icon={<ShoppingBag size={18} />} />
-                    <StatCard label="Needs Review" value={String(analytics.needsReviewCount || queueCounts.needsReview)} icon={<AlertTriangle size={18} />} />
-                    <StatCard label="Waiting Choice" value={String(analytics.awaitingChoiceCount || queueCounts.awaitingChoice)} icon={<Clock3 size={18} />} />
-                    <StatCard label="Ready To Bill" value={String(analytics.readyToBillCount || queueCounts.readyToBill)} icon={<PackageCheck size={18} />} />
+                <div className="flex items-center gap-3">
+                    <div className="hidden md:flex items-center gap-2 bg-white px-4 py-2 rounded-2xl shadow-sm border border-gray-100">
+                        <RefreshCcw size={14} className={`text-gray-400 ${loading ? 'animate-spin' : ''}`} />
+                        <span className="text-xs font-bold text-gray-600">₹{todayRevenuePotential.toLocaleString()} Potential</span>
+                    </div>
+                    <button
+                        onClick={handleSendReminders}
+                        disabled={sendingReminder}
+                        className="bg-white border border-gray-100 text-gray-700 font-bold px-4 py-2.5 rounded-2xl shadow-sm hover:bg-gray-50 flex items-center gap-2 text-sm transition-all"
+                    >
+                        {sendingReminder ? <Activity size={16} className="animate-spin" /> : <Bell size={16} className="text-primary-green" />}
+                        {sendingReminder ? 'Sending...' : 'Broadcast Reminders'}
+                    </button>
+                    <button
+                        onClick={loadDashboard}
+                        className="bg-primary-green text-white font-bold px-4 py-2.5 rounded-2xl shadow-lg shadow-green-100 hover:scale-105 transition-all flex items-center gap-2 text-sm"
+                    >
+                        <RefreshCcw size={16} />
+                    </button>
                 </div>
-            </section>
+            </div>
 
-            <div className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
-                <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                            <h2 className="text-2xl font-black text-slate-900 dark:text-white">Incoming Orders</h2>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">Includes manual review queue, customer choice queue, and bill-ready orders.</p>
+            {/* Main Messaging Desk */}
+            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6 overflow-hidden min-h-0">
+
+                {/* Left: Conversation List */}
+                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col min-h-0 overflow-hidden">
+                    <div className="p-6 border-b border-gray-50 bg-gray-50/30">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-black text-gray-900 uppercase tracking-tight">{t['Conversations'] || 'Conversations'}</h3>
+                            <span className="bg-primary-green/10 text-primary-green text-[10px] font-black px-2 py-0.5 rounded-full">
+                                {filteredOrders.length} ACTIVE
+                            </span>
                         </div>
-                        <div className="rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                            {orderCountLabel}
+                        <div className="flex flex-wrap gap-2">
+                            <FilterChip label="All" active={activeFilter === 'all'} onClick={() => setActiveFilter('all')} />
+                            <FilterChip label="Review" active={activeFilter === 'needs_review'} onClick={() => setActiveFilter('needs_review')} />
+                            <FilterChip label="Choice" active={activeFilter === 'awaiting_choice'} onClick={() => setActiveFilter('awaiting_choice')} />
+                            <FilterChip label="Ready" active={activeFilter === 'ready_to_bill'} onClick={() => setActiveFilter('ready_to_bill')} />
                         </div>
                     </div>
 
-                    <div className="mb-4 flex flex-wrap gap-2">
-                        <FilterChip label="All" active={activeFilter === 'all'} onClick={() => setActiveFilter('all')} />
-                        <FilterChip label="Needs Review" active={activeFilter === 'needs_review'} onClick={() => setActiveFilter('needs_review')} />
-                        <FilterChip label="Waiting Customer" active={activeFilter === 'awaiting_choice'} onClick={() => setActiveFilter('awaiting_choice')} />
-                        <FilterChip label="Ready To Bill" active={activeFilter === 'ready_to_bill'} onClick={() => setActiveFilter('ready_to_bill')} />
-                    </div>
-
-                    <div className="space-y-4">
-                        {loading ? (
-                            <div className="rounded-2xl border border-dashed border-slate-300 px-5 py-12 text-center text-slate-500 dark:border-white/10 dark:text-slate-400">Loading WhatsApp orders...</div>
-                        ) : filteredOrders.length === 0 ? (
-                            <div className="rounded-2xl border border-dashed border-slate-300 px-5 py-12 text-center text-slate-500 dark:border-white/10 dark:text-slate-400">
-                                No orders in this queue.
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-hide">
+                        {loading && orders.length === 0 ? (
+                            <div className="py-20 text-center space-y-4">
+                                <div className="animate-spin w-8 h-8 border-4 border-primary-green border-t-transparent rounded-full mx-auto" />
+                                <p className="text-sm font-bold text-gray-400">Loading orders...</p>
                             </div>
-                        ) : filteredOrders.map((order) => (
-                            <div key={order._id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/[0.03]">
-                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                    <div>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <h3 className="text-lg font-black text-slate-900 dark:text-white">{order.customerId?.name || order.customerPhone}</h3>
-                                            <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${statusClasses[order.status]}`}>{order.status}</span>
-                                            <span className="rounded-full bg-slate-200 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:bg-white/10 dark:text-slate-300">
-                                                {order.channel === 'whatsapp_audio' ? 'Voice Note' : 'Text'}
-                                            </span>
-                                            {isOrderNeedsReview(order) && <ReviewBadge tone="amber" text="Needs Review" />}
-                                            {isOrderAwaitingChoice(order) && <ReviewBadge tone="blue" text="Awaiting Customer" />}
-                                            {order.convertedBillId && <ReviewBadge tone="green" text="Bill Linked" />}
-                                        </div>
-                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                                            {order.customerPhone} | {new Date(order.createdAt).toLocaleString('en-IN')} | Ref: {order.referenceCode || order._id.slice(-6).toUpperCase()}
-                                        </p>
-                                        <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">{order.parsedText || order.customerMessage}</p>
+                        ) : filteredOrders.length === 0 ? (
+                            <div className="py-20 text-center opacity-40">
+                                <ShoppingBag size={48} className="mx-auto mb-4" />
+                                <p className="text-sm font-bold">No orders found</p>
+                            </div>
+                        ) : (
+                            filteredOrders.map((order) => (
+                                <button
+                                    key={order._id}
+                                    onClick={() => setSelectedOrderId(order._id)}
+                                    className={`w-full text-left p-4 rounded-3xl border transition-all flex items-center gap-4 ${selectedOrderId === order._id
+                                        ? 'bg-green-50/50 border-primary-green/20 shadow-md ring-1 ring-primary-green/10'
+                                        : 'bg-white border-transparent hover:bg-gray-50'
+                                        }`}
+                                >
+                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black ${selectedOrderId === order._id ? 'bg-primary-green text-white' : 'bg-gray-100 text-gray-400'
+                                        }`}>
+                                        {(order.customerId?.name || 'C')[0].toUpperCase()}
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Total</p>
-                                        <p className="text-2xl font-black text-slate-900 dark:text-white">Rs.{order.totalAmount.toFixed(0)}</p>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-start">
+                                            <p className="font-bold text-gray-900 truncate">{order.customerId?.name || order.customerPhone}</p>
+                                            <span className="text-[10px] text-gray-400 font-bold whitespace-nowrap ml-2">
+                                                {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            {order.channel === 'whatsapp_audio' ? <Mic size={12} className="text-primary-green" /> : <MessageCircle size={12} className="text-gray-400" />}
+                                            <p className="text-xs text-gray-500 truncate">{order.parsedText || order.customerMessage}</p>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            {isOrderNeedsReview(order) && <div className="w-2 h-2 rounded-full bg-amber-400" />}
+                                            {isOrderAwaitingChoice(order) && <div className="w-2 h-2 rounded-full bg-blue-400" />}
+                                            {isOrderReadyToBill(order) && <div className="w-2 h-2 rounded-full bg-emerald-400" />}
+                                            <span className="text-[10px] font-black uppercase text-gray-400 tracking-tighter">
+                                                Rs.{order.totalAmount.toFixed(0)} • {order.status}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </div>
+
+                {/* Right: Active Detail Panel */}
+                <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col overflow-hidden min-h-0">
+                    {activeOrder ? (
+                        <>
+                            {/* Detail Panel Header */}
+                            <div className="px-8 py-6 border-b border-gray-50 bg-gray-50/20 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-14 h-14 rounded-2xl bg-primary-green text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-green-100">
+                                        {(activeOrder.customerId?.name || 'C')[0].toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-gray-900">{activeOrder.customerId?.name || activeOrder.customerPhone}</h3>
+                                        <p className="text-xs font-bold text-gray-400 flex items-center gap-2">
+                                            <span className="text-primary-green uppercase tracking-widest">{activeOrder.referenceCode || activeOrder._id.slice(-6).toUpperCase()}</span>
+                                            {activeOrder.customerPhone}
+                                        </p>
                                     </div>
                                 </div>
+                                <div className="flex items-center gap-3">
+                                    <div className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest ${statusClasses[activeOrder.status]}`}>
+                                        {activeOrder.status}
+                                    </div>
+                                    <button
+                                        onClick={() => handleConvertToBill(activeOrder._id)}
+                                        disabled={convertingId === activeOrder._id || Boolean(activeOrder.convertedBillId) || editingOrderId === activeOrder._id || !isOrderReadyToBill(activeOrder)}
+                                        className="bg-primary-green text-white px-6 py-2.5 rounded-2xl text-sm font-black shadow-lg shadow-green-100 transition-all hover:scale-105 disabled:opacity-50 disabled:scale-100"
+                                    >
+                                        {activeOrder.convertedBillId ? 'BILL GENERATED' : convertingId === activeOrder._id ? 'CONVERTING...' : 'CREATE BILL NOW'}
+                                    </button>
+                                </div>
+                            </div>
 
-                                {isOrderNeedsReview(order) && (
-                                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200">
-                                        <p className="font-semibold">Voice note needs manual review.</p>
-                                        <p className="mt-1">Listen to voice note, edit items, then create bill.</p>
-                                        {order.mediaUrl && (
-                                            <div className="mt-2">
-                                                {orderMediaUrls[order._id] ? (
-                                                    <audio controls src={orderMediaUrls[order._id]} className="w-full" />
+                            {/* Detail Panel Body */}
+                            <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-hide">
+
+                                {/* Raw Message Context */}
+                                <div className="space-y-3">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">{t['Customer Request'] || 'Customer Request'}</h4>
+                                    <div className="max-w-[85%] bg-gray-50 rounded-[2rem] rounded-tl-none p-5 border border-gray-100 relative">
+                                        <div className="absolute top-0 left-[-8px] border-[8px] border-transparent border-t-gray-50 border-r-gray-50" />
+                                        <p className="text-gray-800 font-medium leading-relaxed">{activeOrder.customerMessage}</p>
+                                        {activeOrder.channel === 'whatsapp_audio' && activeOrder.mediaUrl && (
+                                            <div className="mt-4 pt-4 border-t border-gray-200/60">
+                                                {orderMediaUrls[activeOrder._id] ? (
+                                                    <audio controls src={orderMediaUrls[activeOrder._id]} className="w-full h-10" />
                                                 ) : (
                                                     <button
-                                                        onClick={() => handleLoadVoiceNote(order)}
-                                                        disabled={loadingMediaId === order._id}
-                                                        className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-60"
+                                                        onClick={() => handleLoadVoiceNote(activeOrder)}
+                                                        disabled={loadingMediaId === activeOrder._id}
+                                                        className="flex items-center gap-3 bg-white border border-gray-200 px-4 py-2 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50"
                                                     >
-                                                        <Headphones size={13} />
-                                                        {loadingMediaId === order._id ? 'Loading audio...' : 'Load Voice Note'}
+                                                        <Mic size={16} className="text-primary-green" />
+                                                        {loadingMediaId === activeOrder._id ? 'FETCHING AUDIO...' : 'PLAY VOICE NOTE'}
                                                     </button>
                                                 )}
                                             </div>
                                         )}
                                     </div>
-                                )}
+                                    {activeOrder.parsedText && activeOrder.parsedText !== activeOrder.customerMessage && (
+                                        <div className="max-w-[85%] ml-auto bg-green-50/50 rounded-[2rem] rounded-tr-none p-5 border border-green-100/50 relative">
+                                            <p className="text-[10px] font-black uppercase text-primary-green/60 mb-1">{t['SDukaan AI Parsing'] || 'SDukaan AI Parsing'}</p>
+                                            <p className="text-gray-800 font-medium leading-relaxed italic">{activeOrder.parsedText}</p>
+                                        </div>
+                                    )}
+                                </div>
 
-                                {isOrderAwaitingChoice(order) && (
-                                    <div className="mt-3 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-3 text-xs text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
-                                        Waiting for customer item variant reply. If delayed, edit items manually and continue billing.
+                                {/* Order Items Control */}
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between px-1">
+                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400">{t['Parsed Order Items'] || 'Parsed Order Items'}</h4>
+                                        <button
+                                            onClick={() => editingOrderId === activeOrder._id ? cancelEditingItems(activeOrder._id) : startEditingItems(activeOrder)}
+                                            className={`text-xs font-black uppercase tracking-widest px-3 py-1.5 rounded-xl transition-all ${editingOrderId === activeOrder._id
+                                                ? 'bg-rose-50 text-rose-500'
+                                                : 'bg-green-50 text-primary-green shadow-sm'
+                                                }`}
+                                        >
+                                            {editingOrderId === activeOrder._id ? 'CANCEL EDIT' : 'MODIFY ITEMS'}
+                                        </button>
                                     </div>
-                                )}
 
-                                <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
-                                    <div className="flex flex-wrap gap-2">
-                                        {(editingOrderId === order._id ? (draftItemsByOrder[order._id] || []) : order.items).map((item) => (
-                                            <div key={`${order._id}-${item.productId}`} className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-slate-950">
-                                                <span className="font-bold text-slate-900 dark:text-white">{item.name}</span>
-                                                {editingOrderId === order._id ? (
-                                                    <span className="ml-2 inline-flex items-center gap-2">
-                                                        <input
-                                                            type="number"
-                                                            min={1}
-                                                            value={item.quantity}
-                                                            onChange={(event) => updateDraftItemQuantity(order._id, item.productId, Number(event.target.value || 1))}
-                                                            className="w-16 rounded-lg border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-white/20 dark:bg-slate-900 dark:text-slate-100"
-                                                        />
-                                                        <button
-                                                            onClick={() => removeDraftItem(order._id, item.productId)}
-                                                            className="rounded-lg bg-rose-100 p-1 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/20 dark:text-rose-300"
-                                                            title="Remove item"
-                                                        >
-                                                            <X size={12} />
-                                                        </button>
-                                                    </span>
-                                                ) : (
-                                                    <span className="ml-2 text-slate-500 dark:text-slate-400">x {item.quantity}</span>
-                                                )}
+                                    {editingOrderId === activeOrder._id ? (
+                                        <div className="rounded-3xl border border-dashed border-gray-200 p-6 space-y-4 bg-gray-50/30">
+                                            <div className="space-y-3">
+                                                {(draftItemsByOrder[activeOrder._id] || []).map((item) => (
+                                                    <div key={item.productId} className="bg-white p-3 rounded-2xl border border-gray-100 flex items-center justify-between shadow-sm">
+                                                        <span className="font-bold text-gray-800">{item.name}</span>
+                                                        <div className="flex items-center gap-3">
+                                                            <input
+                                                                type="number"
+                                                                min={1}
+                                                                value={item.quantity}
+                                                                onChange={(e) => updateDraftItemQuantity(activeOrder._id, item.productId, Number(e.target.value))}
+                                                                className="w-16 bg-gray-50 border border-gray-100 rounded-lg px-2 py-1 text-center font-bold outline-none focus:ring-2 focus:ring-green-100"
+                                                            />
+                                                            <button
+                                                                onClick={() => removeDraftItem(activeOrder._id, item.productId)}
+                                                                className="p-1.5 rounded-lg text-rose-300 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                                                            >
+                                                                <X size={16} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-
-                                    <div className="flex flex-wrap gap-2 lg:justify-end">
-                                        {editingOrderId === order._id ? (
-                                            <>
+                                            <div className="grid grid-cols-[1fr_auto_auto] gap-2 pt-2">
                                                 <select
-                                                    value={newProductByOrder[order._id] || ''}
-                                                    onChange={(event) => setNewProductByOrder((prev) => ({ ...prev, [order._id]: event.target.value }))}
-                                                    className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-white/5 dark:text-slate-200 dark:ring-white/10"
+                                                    value={newProductByOrder[activeOrder._id] || ''}
+                                                    onChange={(e) => setNewProductByOrder((prev) => ({ ...prev, [activeOrder._id]: e.target.value }))}
+                                                    className="bg-white px-4 rounded-xl border border-gray-100 outline-none text-sm font-bold truncate"
                                                 >
-                                                    <option value="">Add product...</option>
-                                                    {productOptions.map((product) => (
-                                                        <option key={product._id} value={product._id}>
-                                                            {product.name} ({product.stock})
-                                                        </option>
+                                                    <option value="">Add more products...</option>
+                                                    {translatedProducts.map((p) => (
+                                                        <option key={p._id} value={p._id}>{p.name} ({p.stock})</option>
                                                     ))}
                                                 </select>
-                                                <button
-                                                    onClick={() => addDraftItem(order._id)}
-                                                    className="inline-flex items-center gap-2 rounded-xl bg-slate-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
-                                                >
-                                                    <Plus size={13} /> Add
+                                                <button onClick={() => addDraftItem(activeOrder._id)} className="p-3 bg-gray-900 text-white rounded-xl hover:bg-black">
+                                                    <Plus size={18} />
                                                 </button>
                                                 <button
-                                                    onClick={() => saveEditedItems(order._id)}
-                                                    disabled={savingItemsId === order._id}
-                                                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                                                    onClick={() => saveEditedItems(activeOrder._id)}
+                                                    disabled={savingItemsId === activeOrder._id}
+                                                    className="px-6 bg-primary-green text-white font-black text-sm rounded-xl shadow-lg shadow-green-100 flex items-center gap-2"
                                                 >
-                                                    <Save size={13} /> {savingItemsId === order._id ? 'Saving...' : 'Save Items'}
+                                                    <Save size={16} /> SAVE
                                                 </button>
-                                                <button
-                                                    onClick={() => cancelEditingItems(order._id)}
-                                                    className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:ring-white/10"
-                                                >
-                                                    <X size={13} /> Cancel
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <button
-                                                onClick={() => startEditingItems(order)}
-                                                className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-white transition hover:bg-amber-600"
-                                            >
-                                                <Pencil size={13} /> Edit Items
-                                            </button>
-                                        )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {activeOrder.items.map((item) => (
+                                                <div key={item.productId} className="bg-white p-4 rounded-3xl border border-gray-100 flex items-center justify-between group hover:border-green-100 transition-all">
+                                                    <div>
+                                                        <p className="font-bold text-gray-900">{item.name}</p>
+                                                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">{item.quantity} units • Rs.{item.unitPrice}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="font-black text-gray-900 leading-none">Rs.{(item.quantity * item.unitPrice).toFixed(0)}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
 
-                                        <button
-                                            onClick={() => handleConvertToBill(order._id)}
-                                            disabled={convertingId === order._id || Boolean(order.convertedBillId) || editingOrderId === order._id || !isOrderReadyToBill(order)}
-                                            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                            <ReceiptText size={14} />
-                                            {order.convertedBillId ? 'Bill Linked' : convertingId === order._id ? 'Converting...' : 'Create Bill'}
-                                        </button>
-
+                                {/* Order Bottom Actions */}
+                                <div className="pt-6 border-t border-gray-50 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-300 mb-1">TOTAL POTENTIAL</p>
+                                        <p className="text-4xl font-black text-primary-green">Rs.{activeOrder.totalAmount.toFixed(0)}</p>
+                                    </div>
+                                    <div className="flex gap-2">
                                         {statusOptions.map((status) => (
                                             <button
-                                                key={`${order._id}-${status}`}
-                                                onClick={() => handleStatusUpdate(order._id, status)}
-                                                disabled={
-                                                    updatingId === order._id ||
-                                                    order.status === status ||
-                                                    ((status === 'ready' || status === 'delivered') && (order.reviewState ?? 'none') !== 'none')
-                                                }
-                                                className={`rounded-xl px-3 py-2 text-xs font-bold capitalize transition ${order.status === status
-                                                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                                                    : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:ring-white/10'
+                                                key={status}
+                                                onClick={() => handleStatusUpdate(activeOrder._id, status)}
+                                                disabled={updatingId === activeOrder._id || activeOrder.status === status}
+                                                className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeOrder.status === status
+                                                    ? 'bg-gray-900 text-white shadow-lg'
+                                                    : 'bg-white border border-gray-100 text-gray-400 hover:bg-gray-50'
                                                     } disabled:opacity-50`}
                                             >
                                                 {status}
@@ -590,110 +654,46 @@ export default function WhatsAppPage() {
                                         ))}
                                     </div>
                                 </div>
-
-                                {order.convertedBillId && (
-                                    <p className="mt-3 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                                        Bill linked: {String(order.convertedBillId)}
-                                    </p>
-                                )}
                             </div>
-                        ))}
-                    </div>
-                </section>
-
-                <section className="space-y-6">
-                    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-                        <div className="mb-4 flex items-center gap-3">
-                            <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                                <MessageCircle size={20} />
+                        </>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center p-12 opacity-30 select-none">
+                            <div className="w-32 h-32 bg-gray-50 rounded-full flex items-center justify-center mb-6">
+                                <MessageCircle size={64} className="text-gray-300" />
                             </div>
-                            <div>
-                                <h2 className="text-xl font-black text-slate-900 dark:text-white">Live Relay</h2>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">Realtime WhatsApp socket events from backend.</p>
-                            </div>
+                            <h3 className="text-2xl font-black text-gray-900">Desk Idle</h3>
+                            <p className="max-w-xs mt-2 text-sm font-medium">Select a conversation from the left to start billing or review items.</p>
                         </div>
-                        <div className="space-y-3">
-                            {events.length === 0 ? (
-                                <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">Waiting for live WhatsApp activity...</div>
-                            ) : events.map((event, index) => (
-                                <div key={`${event.type}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.03]">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className="rounded-xl bg-slate-900 p-2 text-white dark:bg-white dark:text-slate-900">
-                                                {String(event.type).includes('ORDER') ? <ShoppingBag size={14} /> : String(event.type).includes('PAY') ? <Bell size={14} /> : <Activity size={14} />}
-                                            </div>
-                                            <div>
-                                                <p className="text-xs font-black uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">{event.type}</p>
-                                                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{String(event.data.customer || event.data.sender || event.data.message || 'System event')}</p>
-                                            </div>
-                                        </div>
-                                        <span className="text-[11px] text-slate-400">{new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                    </div>
-                                </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Hidden/Desktop Rules & Diagnostics Overlay (Minimalist) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white/50 backdrop-blur-sm rounded-3xl p-4 border border-gray-100 flex items-start gap-4">
+                    <Activity size={24} className="text-gray-300 mt-1" />
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">Live Socket Events</p>
+                        <div className="space-y-1 max-h-20 overflow-y-auto pr-2 scrollbar-hide text-xs">
+                            {events.slice(0, 5).map((e, i) => (
+                                <p key={i} className="text-gray-500"><span className="font-bold text-gray-700">{e.type}</span>: {String(e.data.customer || e.data.message || 'Event')}</p>
                             ))}
                         </div>
                     </div>
-
-                    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-                        <h2 className="text-xl font-black text-slate-900 dark:text-white">Voice + WhatsApp Rules</h2>
-                        <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
-                            <RuleRow icon={<MessageCircle size={16} />} text="Customer sends text or voice note first on WhatsApp." />
-                            <RuleRow icon={<Mic size={16} />} text="Smart Dukaan parses items and asks quick 1/2/3 choice for ambiguous products." />
-                            <RuleRow icon={<PackageCheck size={16} />} text="Shopkeeper can edit items before billing to avoid wrong invoices." />
-                            <RuleRow icon={<Bell size={16} />} text="Status updates are auto-message ready/delivered inside free 24h customer window." />
-                        </div>
-                    </div>
-
-                    <div className="rounded-[2rem] border border-amber-200 bg-amber-50/80 p-5 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
-                        <div className="mb-4 flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                                <div className="rounded-2xl bg-amber-100 p-3 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                                    <AlertTriangle size={18} />
-                                </div>
-                                <div>
-                                    <h2 className="text-xl font-black text-slate-900 dark:text-white">Error Diagnostics</h2>
-                                    <p className="text-sm text-slate-600 dark:text-slate-300">Recent backend/socket failures for quick debugging.</p>
-                                </div>
+                </div>
+                {diagnostics.length > 0 && (
+                    <div className="bg-red-50 rounded-3xl p-4 border border-red-100 flex items-start gap-4">
+                        <AlertTriangle size={24} className="text-red-400 mt-1" />
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-red-400 mb-3">Alert Diagnostics</p>
+                            <div className="space-y-1 text-xs">
+                                {diagnostics.slice(0, 2).map((d, i) => (
+                                    <p key={i} className="text-red-600 font-medium">{d.source}: {d.message}</p>
+                                ))}
                             </div>
-                            <button
-                                onClick={() => setDiagnostics([])}
-                                className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-white/10 dark:text-slate-200 dark:ring-white/10"
-                            >
-                                Clear
-                            </button>
-                        </div>
-
-                        <div className="space-y-2">
-                            {diagnostics.length === 0 ? (
-                                <div className="rounded-2xl border border-dashed border-amber-300 px-4 py-8 text-center text-sm text-amber-700 dark:border-amber-900/40 dark:text-amber-200">
-                                    No active errors. Dashboard APIs are healthy.
-                                </div>
-                            ) : diagnostics.map((diag, index) => (
-                                <div key={`${diag.source}-${diag.at}-${index}`} className="rounded-2xl border border-amber-200 bg-white px-3 py-3 dark:border-amber-900/40 dark:bg-slate-900/40">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                            <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-700 dark:text-amber-300">{diag.source}</p>
-                                            <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">{diag.message}</p>
-                                        </div>
-                                        <div className="text-right text-[11px] text-slate-500 dark:text-slate-400">
-                                            <p>{diag.statusCode ? `HTTP ${diag.statusCode}` : 'Network'}</p>
-                                            <p>{new Date(diag.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
                         </div>
                     </div>
-
-                    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-900">
-                        <h2 className="text-xl font-black text-slate-900 dark:text-white">Queue Snapshot</h2>
-                        <div className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                            <p>Total pipeline value: <span className="font-bold text-slate-900 dark:text-white">Rs.{todayRevenuePotential.toLocaleString()}</span></p>
-                            <p>Pending udhaar in WhatsApp window: <span className="font-bold text-slate-900 dark:text-white">Rs.{analytics.pendingTotal.toLocaleString()}</span></p>
-                            <p>Debtors in active list: <span className="font-bold text-slate-900 dark:text-white">{analytics.activeDebtors}</span></p>
-                        </div>
-                    </div>
-                </section>
+                )}
             </div>
         </div>
     );
@@ -701,23 +701,14 @@ export default function WhatsAppPage() {
 
 function StatCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
     return (
-        <div className="rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur-md">
-            <div className="flex items-center justify-between gap-3">
-                <div>
-                    <p className="text-xs font-black uppercase tracking-[0.25em] text-emerald-100/80">{label}</p>
-                    <p className="mt-2 text-2xl font-black text-white">{value}</p>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+            <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-green-50 text-primary-green rounded-lg">
+                    {icon}
                 </div>
-                <div className="rounded-2xl bg-white/15 p-3 text-white">{icon}</div>
+                <span className="text-gray-500 text-[11px] font-black uppercase tracking-wider">{label}</span>
             </div>
-        </div>
-    );
-}
-
-function RuleRow({ icon, text }: { icon: React.ReactNode; text: string }) {
-    return (
-        <div className="flex items-start gap-3 rounded-2xl bg-slate-50 px-4 py-3 dark:bg-white/[0.03]">
-            <div className="mt-0.5 rounded-xl bg-emerald-100 p-2 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">{icon}</div>
-            <p>{text}</p>
+            <div className="text-2xl font-black text-gray-900">{value}</div>
         </div>
     );
 }
@@ -726,9 +717,9 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
     return (
         <button
             onClick={onClick}
-            className={`rounded-xl px-3 py-2 text-xs font-bold transition ${active
-                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-white/5 dark:text-slate-200 dark:ring-white/10'
+            className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${active
+                ? 'bg-primary-green text-white shadow-md shadow-green-100'
+                : 'bg-white text-gray-400 border border-gray-100 hover:bg-gray-50'
                 }`}
         >
             {label}
@@ -737,15 +728,15 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
 }
 
 function ReviewBadge({ text, tone }: { text: string; tone: 'amber' | 'blue' | 'green' }) {
-    const classes = tone === 'amber'
-        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200'
-        : tone === 'blue'
-            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200'
-            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200';
-
+    const tones = {
+        amber: 'bg-amber-100 text-amber-700',
+        blue: 'bg-blue-100 text-blue-700',
+        green: 'bg-green-100 text-green-700'
+    };
     return (
-        <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${classes}`}>
+        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${tones[tone]}`}>
             {text}
         </span>
     );
 }
+
