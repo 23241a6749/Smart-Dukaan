@@ -870,13 +870,6 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
     const callCountHeader = String(req.query?.CallCount || req.body?.CallCount || '0');
     const callCount = parseInt(callCountHeader, 10) || 0;
 
-    // Prevent infinite loops - max 3 back-and-forth exchanges
-    const MAX_CALL_TURNS = 3;
-    if (callCount >= MAX_CALL_TURNS) {
-        console.log('[Voice] Max call turns reached, ending call');
-        return res.send(buildHangupTwiml('Thank you for your time. We will follow up with you shortly. Goodbye.', 'en'));
-    }
-
     try {
         const speechResult = req.body?.SpeechResult || '';
         const from = req.body?.From || '';
@@ -895,6 +888,13 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
         const voiceLangCtx = await resolveVoiceLanguageContextByPhone(customerPhone);
         const lang: VoiceLang = voiceLangCtx.lang;
         console.log(`[Voice] Resolved language: ${lang} (source: ${voiceLangCtx.source})`);
+
+        // Prevent infinite loops - max 6 back-and-forth exchanges for better conversation
+        const MAX_CALL_TURNS = 6;
+        if (callCount >= MAX_CALL_TURNS) {
+            console.log('[Voice] Max call turns reached, ending call');
+            return res.send(buildHangupTwiml(getVoicePrompt(lang, 'closurePromised', { promisedDateText: formatDateForVoice(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), lang) }), lang));
+        }
 
         // If no speech detected, re-prompt with retry cap
         if (!speechResult) {
@@ -1014,11 +1014,13 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
         // Save AI reply to memory
         appendToHistory(invoiceId, 'assistant', aiReply);
 
-        // Check if AI wants to end the call
+        // Check if AI wants to end the call - only end on clear outcomes
         const shouldEndByModel = aiReply.includes('END_CALL');
         aiReply = aiReply.replace(/END_CALL/g, '').trim();
 
-        const shouldEnd = shouldEndByModel || (intent !== 'UNKNOWN' && intent !== 'EXTENSION_REQUESTED') || finalConfidence < 0.4;
+        // Only end call if: model says so, OR clear payment promise, OR clear dispute
+        // Continue conversation if: unknown intent or extension requested (need more info)
+        const shouldEnd = shouldEndByModel || intent === 'PAYMENT_PROMISED' || intent === 'DISPUTE';
         
         // Get localized prompt based on conversation stage
         let nextPrompt = '';
@@ -1033,15 +1035,16 @@ invoiceWebhooksRouter.post('/voice', async (req: Request, res: Response) => {
             } else if (intent === 'DISPUTE') {
                 nextPrompt = getVoicePrompt(lang, 'closureDispute');
             } else {
-                nextPrompt = getVoicePrompt(lang, 'unableToUnderstand');
+                nextPrompt = getVoicePrompt(lang, 'closurePromised', { promisedDateText: formatDateForVoice(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), lang) });
             }
         } else {
-            // Continue conversation - ask next question based on stage
-            if (intent === 'UNKNOWN' && finalConfidence < 0.5) {
+            // Continue conversation - ask next question based on intent
+            if (intent === 'UNKNOWN' || finalConfidence < 0.5) {
                 nextPrompt = getVoicePrompt(lang, 'askPartialNow', { minimumPartial: Math.min(100, invoice.amount * 0.1) });
             } else if (intent === 'EXTENSION_REQUESTED') {
                 nextPrompt = getVoicePrompt(lang, 'askRemainingDate', { remainingAmount: invoice.amount });
             } else {
+                // Default: ask about partial payment
                 nextPrompt = getVoicePrompt(lang, 'askPartialNow', { minimumPartial: Math.min(100, invoice.amount * 0.1) });
             }
         }
