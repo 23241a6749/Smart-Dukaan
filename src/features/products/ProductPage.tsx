@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, AlertTriangle, Edit2, X, Package, Tag, Archive, BarChart2, Hash, CalendarDays, Layers } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { productApi } from '../../services/api';
+import { productApi, expiryApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useTranslate } from '../../hooks/useTranslate';
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -124,8 +124,28 @@ export const ProductPage: React.FC = () => {
         await productApi.update(editingId, formData as any);
         addToast('Product updated successfully', 'success');
       } else {
-        await productApi.create(formData as any);
-        addToast('Product added successfully', 'success');
+        // Create product first
+        const productResponse = await productApi.create(formData as any);
+        const productId = productResponse.data._id;
+        
+        // If expiry date is provided, create an inventory batch with expiry
+        if (formData.expiryDate) {
+          try {
+            await expiryApi.createBatch({
+              productId: productId,
+              quantity: formData.stock,
+              costPricePerUnit: formData.price * 0.7, // Assume 70% of selling price as cost
+              sellingPriceSnapshot: formData.price,
+              expiryDate: formData.expiryDate,
+            });
+            addToast('Product added with expiry tracking!', 'success');
+          } catch (batchErr) {
+            console.error('Failed to create batch:', batchErr);
+            addToast('Product added but failed to create expiry batch', 'error');
+          }
+        } else {
+          addToast('Product added successfully', 'success');
+        }
       }
       setFormData({ name: '', price: 0, stock: 0, minStock: 5, category: '', icon: '📦', unit: 'piece', expiryDate: '' });
       setEditingId(null);

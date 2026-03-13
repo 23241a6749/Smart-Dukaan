@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Check, Loader2, X, Scan, Save, Plus, History, FileText, Calendar, Package, CalendarDays } from 'lucide-react';
 import Tesseract from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
-import { supplierBillApi, productApi } from '../../services/api';
+import { supplierBillApi, productApi, expiryApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
 // Worker configuration for PDF.js
@@ -84,8 +84,28 @@ export const SupplierBillPage: React.FC = () => {
         }
         setSavingProduct(true);
         try {
-            await productApi.create(productForm as any);
-            addToast(`"${productForm.name}" added to inventory!`, 'success');
+            // Create product first
+            const productResponse = await productApi.create(productForm as any);
+            const productId = productResponse.data._id;
+            
+            // If expiry date is provided, create an inventory batch with expiry
+            if (productForm.expiryDate) {
+                try {
+                    await expiryApi.createBatch({
+                        productId: productId,
+                        quantity: productForm.stock,
+                        costPricePerUnit: productForm.price * 0.7,
+                        sellingPriceSnapshot: productForm.price,
+                        expiryDate: productForm.expiryDate,
+                    });
+                    addToast(`"${productForm.name}" added with expiry tracking!`, 'success');
+                } catch (batchErr) {
+                    console.error('Failed to create batch:', batchErr);
+                    addToast('Product added but failed to create expiry batch', 'error');
+                }
+            } else {
+                addToast(`"${productForm.name}" added to inventory!`, 'success');
+            }
             setProductForm({ ...emptyProduct });
             setShowProductDialog(false);
         } catch (err) {
