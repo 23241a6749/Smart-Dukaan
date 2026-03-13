@@ -1039,9 +1039,18 @@ export const BillingPage: React.FC = () => {
                                             onChange={async (e) => {
                                                 const newLang = e.target.value;
                                                 setCustomerVoiceLanguage(newLang);
-                                                if (selectedCustomer?.id) {
+                                                // Use _id (MongoDB) not id (IndexedDB) for API update
+                                                if (selectedCustomer?._id) {
                                                     try {
-                                                        await customerApi.update(String(selectedCustomer.id), { preferredVoiceLanguage: newLang });
+                                                        await customerApi.update(selectedCustomer._id, { preferredVoiceLanguage: newLang });
+                                                        addToast('Voice language updated!', 'success');
+                                                    } catch (err) {
+                                                        console.error('Failed to update voice language', err);
+                                                    }
+                                                } else if (selectedCustomer?.phoneNumber) {
+                                                    // Fallback: try to update by phone number if _id not available
+                                                    try {
+                                                        await customerApi.update(selectedCustomer.phoneNumber, { preferredVoiceLanguage: newLang });
                                                         addToast('Voice language updated!', 'success');
                                                     } catch (err) {
                                                         console.error('Failed to update voice language', err);
