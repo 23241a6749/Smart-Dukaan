@@ -157,7 +157,8 @@ export const SupplierBillPage: React.FC = () => {
         setStatusText('Initializing OCR...');
         setProgress(0);
         try {
-            const result = await Tesseract.recognize(url, 'eng', {
+            // Create worker explicitly for better error handling
+            const worker = await Tesseract.createWorker('eng', 1, {
                 logger: m => {
                     if (m.status === 'recognizing text') {
                         setProgress(Math.round(m.progress * 100));
@@ -167,10 +168,21 @@ export const SupplierBillPage: React.FC = () => {
                     }
                 }
             });
-            parseBillText(result.data.text);
-        } catch (err) {
-            console.error('OCR Error', err);
-            alert('Failed to scan image');
+            const { data } = await worker.recognize(url);
+            await worker.terminate();
+            parseBillText(data.text);
+        } catch (err: any) {
+            console.error('OCR Error:', err);
+            setStatusText('OCR failed');
+            // Fallback: try simple recognize as backup
+            try {
+                setStatusText('Retrying with fallback...');
+                const result = await Tesseract.recognize(url, 'eng');
+                parseBillText(result.data.text);
+                addToast('OCR completed with fallback mode', 'success');
+            } catch (fallbackErr: any) {
+                addToast(fallbackErr?.message || 'Failed to scan image. Please add items manually.', 'error');
+            }
         } finally {
             setIsProcessing(false);
         }
@@ -194,9 +206,10 @@ export const SupplierBillPage: React.FC = () => {
                 setPreviewUrl(imageUrl);
                 await processImage(imageUrl);
             }
-        } catch (err) {
-            console.error('PDF Error', err);
-            alert('Failed to process PDF');
+        } catch (err: any) {
+            console.error('PDF Error:', err);
+            setStatusText('PDF processing failed');
+            addToast(err?.message || 'Failed to process PDF. Please try again or add items manually.', 'error');
             setIsProcessing(false);
         }
     };
@@ -236,7 +249,9 @@ export const SupplierBillPage: React.FC = () => {
         });
 
         if (items.length === 0) {
-            alert('Could not automatically detect items. Please add manually.');
+            addToast('Could not detect items from image. Please add manually.', 'error');
+        } else {
+            addToast(`Found ${items.length} items from bill!`, 'success');
         }
         setLineItems(items);
     };
