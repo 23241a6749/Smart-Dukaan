@@ -5,8 +5,8 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { supplierBillApi, productApi, expiryApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
-// Worker configuration for PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// PDF.js v5 worker setup - use bundled worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 interface LineItem {
     id: string;
@@ -168,9 +168,10 @@ export const SupplierBillPage: React.FC = () => {
                 }
             });
             parseBillText(result.data.text);
-        } catch (err) {
-            console.error('OCR Error', err);
-            alert('Failed to scan image');
+        } catch (err: any) {
+            console.error('OCR Error:', err);
+            setStatusText('OCR failed');
+            addToast(err?.message || 'Failed to scan image. Please try again.', 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -181,7 +182,8 @@ export const SupplierBillPage: React.FC = () => {
         setStatusText('Processing PDF...');
         try {
             const arrayBuffer = await pdfFile.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            const pdf = await loadingTask.promise;
             const page = await pdf.getPage(1);
             const viewport = page.getViewport({ scale: 2 });
             const canvas = document.createElement('canvas');
@@ -189,14 +191,15 @@ export const SupplierBillPage: React.FC = () => {
             canvas.height = viewport.height;
             canvas.width = viewport.width;
             if (context) {
-                await page.render({ canvasContext: context, viewport } as any).promise;
+                await page.render({ canvasContext: context, viewport, canvas }).promise;
                 const imageUrl = canvas.toDataURL('image/png');
                 setPreviewUrl(imageUrl);
                 await processImage(imageUrl);
             }
-        } catch (err) {
-            console.error('PDF Error', err);
-            alert('Failed to process PDF');
+        } catch (err: any) {
+            console.error('PDF Error:', err);
+            setStatusText('PDF processing failed');
+            addToast(err?.message || 'Failed to process PDF. Please try with an image instead.', 'error');
             setIsProcessing(false);
         }
     };

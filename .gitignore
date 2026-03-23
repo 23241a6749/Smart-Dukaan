@@ -30,6 +30,7 @@ dist-ssr/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
 
 # Varia
 .vercel
@@ -47,3 +48,10 @@ out/
 
 # TypeScript
 *.tsbuildinfo
+
+# Capacitor
+android/app/build/
+android/.gradle/
+ios/App/build/
+ios/App/Pods/
+session-ses_31cb.md
