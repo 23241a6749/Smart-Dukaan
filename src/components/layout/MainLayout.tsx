@@ -18,7 +18,6 @@ export const MainLayout: React.FC = () => {
 
     const { t, language, toggleLanguage } = useLanguage();
 
-
     const confirmLogout = () => {
         logout();
         navigate('/login');
