@@ -376,13 +376,14 @@ invoiceRouter.post('/recover-now/:customerId', auth, async (req: Request, res: R
             client_email: `${(customer.name || 'user').replace(/\s/g, '').toLowerCase()}@example.com`,
             client_phone: customer.phoneNumber,
             amount: pending,
-            due_date: new Date(Date.now() - 60 * 1000),
+            due_date: new Date(),
             status: 'overdue',
             reminder_level: 2
         });
 
         invoice.amount = pending;
         invoice.status = 'overdue';
+        invoice.due_date = new Date();
         const callMessage = await generateMessage(invoice, 'urgent reminder', 'call');
         const callStatus = await sendNotification(invoice, callMessage, 'call');
         invoice.last_contacted_at = new Date();
