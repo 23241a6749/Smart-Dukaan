@@ -1000,26 +1000,6 @@ export const BillingPage: React.FC = () => {
                 )}
             </div>
 
-            {/* Smart Insights Banner */}
-            <div className="px-4 mt-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="bg-gradient-to-br from-green-600 to-emerald-800 p-4 rounded-2xl flex items-center justify-between shadow-lg shadow-green-500/10 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -mr-6 -mt-6"></div>
-                    <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/5 rounded-full blur-xl -ml-4 -mb-4"></div>
-                    
-                    <div className="relative z-10">
-                        <div className="text-[10px] font-black uppercase tracking-widest text-green-200 mb-1 flex items-center gap-1">
-                            <span>Smart Billing Insights</span>
-                            <span className="animate-bounce">🧠</span>
-                        </div>
-                        <div className="text-md font-black text-white leading-tight">Recover ₹4,250 pending today</div>
-                        <div className="text-[9px] text-green-200/70 font-bold mt-0.5 flex items-center gap-0.5">Tap to view khata list <ChevronRight size={10} /></div>
-                    </div>
-                    <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/20 relative z-10 shadow-inner">
-                        <Award size={22} className="text-yellow-300" />
-                    </div>
-                </div>
-            </div>
-
             {/* Product Grid */}
             <div className="p-4 pb-48">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
