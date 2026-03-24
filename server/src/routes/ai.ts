@@ -1,8 +1,16 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import OpenAI from 'openai';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 import { auth } from '../middleware/auth.js';
 
 const router = express.Router();
+const uploadDir = 'uploads/';
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+const upload = multer({ dest: uploadDir });
 
 let openai: OpenAI | null = null;
 try {
@@ -160,44 +168,91 @@ router.post('/parse-voice-command', auth, async (req, res) => {
             return res.status(503).json({ message: 'AI Parsing service not available' });
         }
 
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                {
-                    role: "system",
-                    content: `You are an intelligent voice assistant for a Kirana/MSME shop billing application. 
-                    The user will provide a voice command (potentially in English, Hindi, Tamil, or mixed Hinglish) to add items to their cart.
-                    Extract the product names, quantities, and units.
-                    
-                    CONSTRAINTS:
-                    - Normalize product names to simple English (e.g., "cheeni" -> "sugar", "doodh" -> "milk").
-                    - If no quantity is mentioned, assume 1.
-                    - If a unit is mentioned (kg, l, packet, piece), include it.
-                    - Return ONLY a JSON array of objects.
-                    - Example Output: [{"product": "sugar", "quantity": 2, "unit": "kg"}, {"product": "milk", "quantity": 3, "unit": "liter"}]`
-                },
-                {
-                    role: "user",
-                    content: command
-                }
-            ],
-            response_format: { type: "json_object" },
-            temperature: 0,
-        });
-
-        const content = response.choices[0].message.content;
-        if (content) {
-            const result = JSON.parse(content);
-            // The AI might return an object like { "items": [...] } or just the array if handled correctly.
-            // But with json_object format, we expect a wrapper or we should specify the key.
-            res.json({ items: result.items || result.products || Object.values(result)[0] || [] });
-        } else {
-            res.json({ items: [] });
-        }
+        const items = await getParsedItemsFromText(command, openai);
+        res.json({ items });
     } catch (err: any) {
         console.error('AI Parsing error:', err.message);
         res.status(500).json({ message: 'AI Parsing failed' });
     }
 });
+
+router.post('/process-voice-blob', auth, upload.single('audio'), async (req: any, res: any) => {
+    const filePath = req.file?.path;
+    let tempWebmPath: string | null = null;
+
+    try {
+        if (!filePath || !openai) {
+            return res.status(400).json({ message: 'Audio file or AI service unavailable' });
+        }
+
+        // Whisper often requires a file extension to correctly detect the codec
+        tempWebmPath = `${filePath}.webm`;
+        fs.renameSync(filePath, tempWebmPath);
+
+        // 1. Transcribe with Whisper
+        const transcription = await openai.audio.transcriptions.create({
+            file: fs.createReadStream(tempWebmPath),
+            model: "whisper-1",
+        });
+
+        const command = transcription.text;
+        if (!command || !command.trim()) {
+            return res.json({ items: [], transcript: '' });
+        }
+
+        // 2. Parse text with GPT
+        const items = await getParsedItemsFromText(command, openai);
+
+        res.json({ items, transcript: command });
+    } catch (err: any) {
+        console.error('Voice blob processing error:', err.message);
+        res.status(500).json({ message: 'Voice processing failed' });
+    } finally {
+        // Clean up temp files
+        if (tempWebmPath && fs.existsSync(tempWebmPath)) {
+            fs.unlinkSync(tempWebmPath);
+        } else if (filePath && fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+    }
+});
+
+/**
+ * Shared logic to extract items from text command
+ */
+async function getParsedItemsFromText(command: string, client: OpenAI) {
+    const response = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+            {
+                role: "system",
+                content: `You are an intelligent voice assistant for a Kirana/MSME shop billing application. 
+                The user will provide a voice command (potentially in English, Hindi, Tamil, or mixed Hinglish) to add items to their cart.
+                Extract the product names, quantities, and units.
+                
+                CONSTRAINTS:
+                - Normalize product names to simple English (e.g., "cheeni" -> "sugar", "doodh" -> "milk").
+                - If no quantity is mentioned, assume 1.
+                - If a unit is mentioned (kg, l, packet, piece), include it.
+                - Search for products in the input string.
+                - Return ONLY a JSON array of objects with the key "items".
+                - Example Output: {"items": [{"product": "sugar", "quantity": 2, "unit": "kg"}, {"product": "milk", "quantity": 3, "unit": "liter"}]}`
+            },
+            {
+                role: "user",
+                content: command
+            }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0,
+    });
+
+    const content = response.choices[0].message.content;
+    if (content) {
+        const result = JSON.parse(content);
+        return result.items || result.products || Object.values(result)[0] || [];
+    }
+    return [];
+}
 
 export { router as aiRouter };

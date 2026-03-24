@@ -492,6 +492,13 @@ export const aiApi = {
     translate: (text: string, targetLanguage: string) => api.post('/ai/translate', { text, targetLanguage }),
     batchTranslate: (texts: string[], targetLanguage: string) => api.post('/ai/batch-translate', { texts, targetLanguage }),
     parseVoiceCommand: (command: string) => api.post<{ items: Array<{ product: string; quantity: number; unit?: string }> }>('/ai/parse-voice-command', { command }),
+    processVoiceBlob: (blob: Blob) => {
+        const formData = new FormData();
+        formData.append('audio', blob, 'audio.webm');
+        return api.post<{ items: Array<{ product: string; quantity: number; unit?: string }>; transcript: string }>('/ai/process-voice-blob', formData, {
+            timeout: 30000 // 30s timeout for voice processing
+        });
+    }
 };
 
 export default api;

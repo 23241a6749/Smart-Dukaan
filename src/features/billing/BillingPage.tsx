@@ -3,8 +3,8 @@ import { io } from 'socket.io-client';
 import { useCart } from '../../contexts/CartContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useToast } from '../../contexts/ToastContext';
-import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
-import { productApi, customerApi, billApi, ledgerApi } from '../../services/api';
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
+import { productApi, customerApi, billApi, ledgerApi, aiApi } from '../../services/api';
 import type { Customer } from '../../services/api';
 import { db } from '../../db/db';
 import type { Customer as LocalCustomer } from '../../db/db';
@@ -16,7 +16,6 @@ import { useTranslate } from '../../hooks/useTranslate';
 import { useProductUsage } from '../../hooks/useProductUsage';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../../components/PullToRefreshIndicator';
-import { aiApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5001';
@@ -171,34 +170,28 @@ export const BillingPage: React.FC = () => {
     const [isProcessingVoice, setIsProcessingVoice] = useState(false);
     const [hasStartedVoice, setHasStartedVoice] = useState(false);
 
-    const handleVoiceCommand = React.useCallback(async (transcript: string) => {
-        if (!transcript.trim()) return;
-
+    const handleVoiceResult = React.useCallback(async (blob: Blob) => {
         setIsProcessingVoice(true);
-        addToast(t['Processing voice...'] || 'Processing voice...', 'info');
+        addToast(t['AI is analyzing your voice...'] || 'AI is analyzing your voice...', 'info');
 
         try {
-            const response = await aiApi.parseVoiceCommand(transcript);
-            let items = response.data.items;
+            const response = await aiApi.processVoiceBlob(blob);
+            const { items, transcript } = response.data;
 
-            // Handle different JSON structures returned by different AI response variations
-            if (!Array.isArray(items)) {
-                if (typeof items === 'object' && items !== null) {
-                    items = Object.values(items).find(v => Array.isArray(v)) as any[] || [];
+            if (!items || items.length === 0) {
+                if (transcript) {
+                    addToast(t['AI couldn\'t find products in your command.'] || 'AI couldn\'t find products in your command.', 'warning');
                 } else {
-                    items = [];
+                    addToast(t['No voice detected. Please speak louder.'] || 'No voice detected. Please speak louder.', 'warning');
                 }
-            }
-
-            if (items.length === 0) {
-                addToast(t['AI couldn\'t understand clearly'] || 'AI couldn\'t understand clearly', 'warning');
-                setSearchTerm(transcript);
                 return;
             }
 
             let addedCount = 0;
+            const addedItemsMetas: Array<{ _id: string }> = [];
+            const missedItems: string[] = [];
+
             for (const aiItem of items) {
-                // Find best match in the currently visible/loaded products
                 const match = products.find((p: any) => {
                     const searchName = aiItem.product.toLowerCase();
                     const prodName = p.name.toLowerCase();
@@ -217,53 +210,59 @@ export const BillingPage: React.FC = () => {
                             updateQuantity(match._id, availableStock, availableStock);
                             addToast(`Only ${availableStock} units of ${match.name} available. Added max possible.`, 'warning');
                             addedCount++;
+                            addedItemsMetas.push({ _id: match._id });
                         } else {
-                            addToast(`${match.name} is already at max stock in your cart.`, 'warning');
+                            addToast(`${match.name} is already at max stock.`, 'warning');
                         }
                     } else {
                         if (!existingItem) {
                             addToCart(match, availableStock);
                             if (targetQty > 1) {
-                                // Add one, then update to the target quantity
-                                // We use a small timeout to ensure CartContext state update completes for the first item
                                 setTimeout(() => updateQuantity(match._id, targetQty, availableStock), 50);
                             }
                         } else {
                             updateQuantity(match._id, targetQty, availableStock);
                         }
                         addedCount++;
+                        addedItemsMetas.push({ _id: match._id });
                     }
-                    recordUsage(match._id);
+                } else {
+                    missedItems.push(aiItem.product);
                 }
             }
 
-            if (addedCount > 0) {
-                addToast(`AI: Successfully added ${addedCount} order items 🏪`, 'success');
-            } else {
-                addToast(t['No matching products found'] || 'No matching products found', 'warning');
-                setSearchTerm(transcript);
+            // Record usage in batch for efficiency
+            if (addedItemsMetas.length > 0) {
+                recordUsage(addedItemsMetas);
             }
-        } catch (err) {
-            console.error('Voice AI parsing failed:', err);
-            addToast(t['Voice parsing failed'] || 'Voice parsing failed', 'error');
-            setSearchTerm(transcript);
+
+            if (addedCount > 0) {
+                if (missedItems.length > 0) {
+                    addToast(`Added ${addedCount} items. Could not find: ${missedItems.join(', ')}.`, 'warning');
+                } else {
+                    addToast(`Successfully added ${addedCount} items to cart! 🏪`, 'success');
+                }
+            } else if (transcript) {
+                addToast(t['Products mentioned not found in your shop.'] || 'Products mentioned not found in your shop.', 'warning');
+            }
+        } catch (err: any) {
+            console.error('Voice processing failed details:', err);
+            const serverMsg = err.response?.data?.message;
+            const errorMsg = serverMsg
+                ? `Voice AI Error: ${serverMsg}`
+                : t['Voice processing failed. Please check internet.'] || 'Voice processing failed. Please check internet.';
+            addToast(errorMsg, 'error');
         } finally {
             setIsProcessingVoice(false);
         }
     }, [products, addToCart, updateQuantity, cart, addToast, t, recordUsage]);
 
-    const { isListening, startListening, stopListening, isSupported } = useSpeechRecognition({
-        onResult: handleVoiceCommand,
+    const { isRecording, startRecording, stopRecording, isSupported } = useVoiceRecorder({
+        onStop: handleVoiceResult,
         onError: (err) => {
-            if (err === 'network') {
-                addToast(t['Network error: Please check your internet for voice input.'] || 'Network error: Please check your internet for voice input.', 'error');
-            } else if (err === 'not-allowed') {
-                addToast(t['Microphone permission denied.'] || 'Microphone permission denied.', 'error');
-            } else {
-                console.error('Speech recognition error:', err);
-            }
-        },
-        lang: language
+            console.error('Recorder error:', err);
+            addToast('Microphone access failed or was denied.', 'error');
+        }
     });
 
     const [showCheckout, setShowCheckout] = useState(false);
@@ -1027,7 +1026,7 @@ export const BillingPage: React.FC = () => {
                         />
                         {isSupported && (
                             <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                                {!searchTerm && !isListening && !isProcessingVoice && !hasStartedVoice && (
+                                {!searchTerm && !isRecording && !isProcessingVoice && !hasStartedVoice && (
                                     <div className="absolute -top-12 -right-1 bg-gray-800 text-white text-xs font-black px-4 py-2 rounded-2xl animate-bounce whitespace-nowrap shadow-[0_12px_30px_-8px_rgba(0,0,0,0.5)] border-2 border-white/5 flex flex-col items-center">
                                         <div className="leading-none tracking-tight">
                                             Try "Add Sugar"
@@ -1037,20 +1036,20 @@ export const BillingPage: React.FC = () => {
                                 )}
                                 <button
                                     onClick={() => {
-                                        if (isListening) {
-                                            stopListening();
+                                        if (isRecording) {
+                                            stopRecording();
                                         } else {
                                             setHasStartedVoice(true);
-                                            startListening();
+                                            startRecording();
                                         }
                                     }}
                                     disabled={isProcessingVoice}
-                                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-50/50 backdrop-blur-md text-gray-400 hover:text-primary-green'} ${isProcessingVoice ? 'opacity-50 grayscale' : ''}`}
+                                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-50/50 backdrop-blur-md text-gray-400 hover:text-primary-green'} ${isProcessingVoice ? 'opacity-50 grayscale' : ''}`}
                                 >
                                     {isProcessingVoice ? (
                                         <Loader2 size={18} className="animate-spin text-primary-green" />
                                     ) : (
-                                        <Mic size={18} className={isListening ? 'animate-bounce' : ''} />
+                                        <Mic size={18} className={isRecording ? 'animate-bounce' : ''} />
                                     )}
                                 </button>
                             </div>
