@@ -12,6 +12,7 @@ import { useState, useRef, useEffect } from 'react';
 interface UseSpeechRecognitionOptions {
   onResult?: (transcript: string) => void;
   onError?: (error: string) => void;
+  lang?: string;
 }
 
 export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) => {
@@ -19,6 +20,14 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
   const [transcript, setTranscript] = useState('');
   const [isSupported, setIsSupported] = useState(false);
   const recognitionRef = useRef<any>(null);
+
+  const onResultRef = useRef(options.onResult);
+  const onErrorRef = useRef(options.onError);
+
+  useEffect(() => {
+    onResultRef.current = options.onResult;
+    onErrorRef.current = options.onError;
+  }, [options.onResult, options.onError]);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
@@ -44,7 +53,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
 
           if (event.results[i].isFinal) {
             setTranscript(prev => prev + resultTranscript);
-            options.onResult?.(resultTranscript);
+            onResultRef.current?.(resultTranscript);
           } else {
             interimTranscript += resultTranscript;
           }
@@ -52,7 +61,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       };
 
       recognitionRef.current.onerror = (event: any) => {
-        options.onError?.(event.error);
+        onErrorRef.current?.(event.error);
       };
 
       recognitionRef.current.onend = () => {
@@ -66,6 +75,16 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       }
     };
   }, []); // Only run once on mount
+
+  // Update language dynamically
+  useEffect(() => {
+    if (recognitionRef.current && options.lang) {
+      let speechLang = 'en-US';
+      if (options.lang === 'hi') speechLang = 'hi-IN';
+      if (options.lang === 'te') speechLang = 'te-IN';
+      recognitionRef.current.lang = speechLang;
+    }
+  }, [options.lang]);
 
   const startListening = () => {
     if (isSupported && recognitionRef.current) {

@@ -334,16 +334,43 @@ export const ProductPage: React.FC = () => {
 
               {/* Category */}
               <FormField label="Category">
-                <select
-                  value={formData.category}
-                  onChange={(e) => set('category', e.target.value)}
-                  className={inputClass}
-                >
-                  <option value="">Select a category...</option>
-                  {CATEGORIES.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full pr-1 px-1">
+                  {CATEGORIES.map(c => {
+                    const icons: any = {
+                        'Grocery': '🛒', 'Dairy': '🥛', 'Bakery': '🍞', 'Beverages': '🧃', 'Snacks': '🍿',
+                        'Fruits & Vegetables': '🍎', 'Meat & Seafood': '🥩', 'Frozen Foods': '🧊',
+                        'Personal Care': '🧴', 'Household': '🧹', 'Stationery': '✏️', 'Electronics': '🔌', 'Other': '📦'
+                    };
+                    const gradients: any = {
+                        'Grocery': 'from-green-500 to-green-400',
+                        'Dairy': 'from-blue-500 to-blue-400',
+                        'Bakery': 'from-amber-500 to-yellow-500',
+                        'Beverages': 'from-cyan-500 to-cyan-400',
+                        'Snacks': 'from-red-500 to-pink-500',
+                        'Fruits & Vegetables': 'from-green-600 to-emerald-500',
+                        'Meat & Seafood': 'from-red-600 to-rose-500',
+                        'Frozen Foods': 'from-sky-500 to-blue-400',
+                        'Personal Care': 'from-purple-500 to-fuchsia-400',
+                        'Household': 'from-slate-500 to-gray-400',
+                        'Stationery': 'from-orange-500 to-amber-500',
+                        'Electronics': 'from-slate-800 to-gray-700',
+                        'Other': 'from-gray-400 to-slate-400'
+                    };
+                    const isSelected = formData.category === c;
+
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => set('category', c)}
+                        className={`p-3 rounded-2xl text-white flex flex-col items-center justify-center gap-1.5 transition-all duration-200 transform hover:scale-[1.03] active:scale-[0.97] shadow-sm relative overflow-hidden ${isSelected ? 'ring-4 ring-offset-2 ring-primary-green opacity-100 scale-105 shadow-md' : 'opacity-80 hover:opacity-100'} bg-gradient-to-br ${gradients[c] || 'from-gray-400 to-gray-300'}`}
+                      >
+                        <div className="text-2xl">{icons[c] || '📦'}</div>
+                        <div className="text-[10px] font-black text-center leading-tight tracking-wide uppercase">{c}</div>
+                      </button>
+                    );
+                  })}
+                </div>
               </FormField>
 
               {/* Expiry Date */}
