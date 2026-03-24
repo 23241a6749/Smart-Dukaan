@@ -114,6 +114,13 @@ export const ledgerApi = {
     getCustomerLedger: (customerId: string) => api.get(`/ledger/customer/${customerId}`),
     recordPayment: (data: { customerId: string; amount: number; paymentMode: string }) =>
         api.post('/ledger/payment', data),
+    verifyRazorpayPayment: (data: {
+        razorpay_order_id: string;
+        razorpay_payment_id: string;
+        razorpay_signature: string;
+        customerId: string;
+        amount: number;
+    }) => api.post('/ledger/razorpay/verify-payment', data),
 };
 
 export const groupBuyApi = {
@@ -451,26 +458,26 @@ export const discountApi = {
         createdFor?: 'expiry' | 'manual' | 'promotional';
         linkedBatchId?: string;
     }) => api.post<DiscountCode>('/discounts', data),
-    
+
     getAll: (params?: { isActive?: boolean; createdFor?: string }) =>
         api.get<DiscountCode[]>('/discounts', { params }),
-    
+
     update: (id: string, data: {
         isActive?: boolean;
         discountValue?: number;
         maxUses?: number;
         validUntil?: string;
     }) => api.patch<DiscountCode>(`/discounts/${id}`, data),
-    
+
     validate: (data: { code: string; customerId?: string; billAmount?: number }) =>
         api.post<DiscountValidation>('/discounts/validate', data),
-    
+
     apply: (id: string, data: { billId?: string; customerId?: string; billAmount?: number }) =>
         api.post<{ success: boolean; discountAmount: number; remainingUses: number }>(`/discounts/${id}/apply`, data),
-    
+
     getCustomers: (productId: string, limit?: number) =>
         api.get<DiscountCustomer[]>(`/discounts/customers/${productId}`, { params: { limit } }),
-    
+
     notifyCustomers: (data: {
         productId: string;
         discountCode: string;

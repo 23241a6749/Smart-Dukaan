@@ -1,5 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { LedgerEntry } from '../models/LedgerEntry.js';
 import { Customer } from '../models/Customer.js';
 import { CustomerAccount } from '../models/CustomerAccount.js';
@@ -57,6 +58,68 @@ router.post('/payment', auth, async (req, res) => {
     } catch (err: any) {
         await session.abortTransaction();
         console.error('Ledger Payment Error:', err.message);
+        res.status(400).json({ message: err.message });
+    } finally {
+        session.endSession();
+    }
+});
+
+// Razorpay verification for ledger payments
+router.post('/razorpay/verify-payment', auth, async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const {
+            razorpay_order_id,
+            razorpay_payment_id,
+            razorpay_signature,
+            customerId,
+            amount // amount in rupees
+        } = req.body;
+
+        if (!process.env.RAZORPAY_KEY_SECRET) throw new Error('Razorpay secret missing');
+
+        // Signature check logic
+        const expectedSignature = crypto
+            .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+            .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+            .digest('hex');
+
+        if (expectedSignature !== razorpay_signature) {
+            throw new Error('Payment signature verification failed');
+        }
+
+        // 2. Record Payment
+        const entry = new LedgerEntry({
+            shopkeeperId: req.auth?.userId,
+            customerId,
+            amount,
+            type: 'credit',
+            paymentMode: 'upi',
+            status: 'settled',
+            referenceId: razorpay_payment_id
+        });
+        await entry.save({ session });
+
+        const account = await CustomerAccount.findOne({
+            customerId,
+            shopkeeperId: req.auth?.userId
+        }).session(session);
+
+        if (!account) throw new Error('Customer account not found');
+
+        account.balance -= amount;
+        await account.save({ session });
+
+        await session.commitTransaction();
+
+        recalculateGlobalKhataScore(customerId).catch(err => console.error('Score calculation error:', err));
+
+        res.status(201).json(entry);
+    } catch (err: any) {
+        await session.abortTransaction();
+        console.error('Ledger Razorpay Verify Error:', err.message);
         res.status(400).json({ message: err.message });
     } finally {
         session.endSession();
