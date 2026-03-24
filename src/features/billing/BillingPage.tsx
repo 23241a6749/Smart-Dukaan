@@ -9,7 +9,7 @@ import type { Customer } from '../../services/api';
 import { db } from '../../db/db';
 import type { Customer as LocalCustomer } from '../../db/db';
 import { recalculateKhataScore, SCORE_DEFAULT, calculateKhataLimit, getKhataStatus, type KhataExplanation } from '../../lib/khataLogic';
-import { Search, User, Phone, X, ChevronRight, Minus, Plus, Trash2, Award, Download, Share2, MessageCircle } from 'lucide-react';
+import { Search, User, Phone, X, ChevronRight, Minus, Plus, Trash2, Award, Download, Share2, MessageCircle, Mic, MapPin } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useTranslate } from '../../hooks/useTranslate';
@@ -21,66 +21,37 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5001';
 const BillingProductCard = React.memo(({ product, t, cartItem, addToCart, increaseQuantity, decreaseQuantity, addToast }: any) => {
     const isOutOfStock = product.stock <= 0;
     const inCart = !!cartItem;
+    const marginTags = product.stock <= 3 ? 'Low Stock' : product.price > 300 ? 'Premium' : 'Popular';
 
     return (
-        <div className={`bg-white dark:bg-gray-800 p-3 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col relative transition-all ${isOutOfStock ? 'opacity-40 grayscale-[0.5]' : 'hover:shadow-md'}`}>
-            {isOutOfStock && (
-                <div className="absolute top-2 right-2 bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-tighter z-10">
-                    {t['Sold Out']}
+        <div className={`bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm border border-gray-50 dark:border-gray-800 flex flex-col relative transition-all duration-300 ${isOutOfStock ? 'opacity-40 grayscale-[0.5]' : 'hover:-translate-y-1 hover:shadow-xl hover:shadow-gray-200/20 dark:hover:shadow-black/20'}`}>
+            {!isOutOfStock && (
+                <div className={`absolute top-3 left-3 text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest z-10 ${marginTags === 'Low Stock' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
+                    {marginTags}
                 </div>
             )}
-
-            <div className="flex-1 flex flex-col items-center justify-center py-2">
-                <div className="text-4xl mb-2">{product.icon || '📦'}</div>
-                <span className="font-bold text-gray-900 dark:text-gray-100 leading-tight text-center text-sm mb-1 line-clamp-2">{product.name}</span>
-                <span className="text-primary-green font-bold text-sm">₹{product.price}/{product.unit}</span>
-                {product.stock <= product.minStock && product.stock > 0 && (
-                    <span className="text-[10px] text-orange-500 font-semibold mt-1">{t['Only']} {product.stock} {t['left']}</span>
-                )}
+            <div className="flex-1 flex flex-col items-center justify-center py-4">
+                <div className={`text-5xl mb-3 flex items-center justify-center h-16 w-16 bg-gray-50 dark:bg-gray-700/50 rounded-2xl ${!isOutOfStock ? 'group-hover:animate-bounce mt-2' : ''}`}>{product.icon || '📦'}</div>
+                <span className="font-black text-gray-900 dark:text-gray-100 leading-tight text-center text-sm mb-1 line-clamp-1">{product.name}</span>
+                <span className="text-gray-900 dark:text-white font-black text-md">₹{product.price}<span className="text-[10px] text-gray-400">/{product.unit}</span></span>
             </div>
-
             {!isOutOfStock && (
                 <div className="mt-2">
                     {!inCart ? (
-                        <button
-                            onClick={() => {
-                                const success = addToCart(product, product.stock);
-                                if (!success) addToast(`${t['Only']} ${product.stock} ${product.unit} ${t['available']}`, 'warning');
-                            }}
-                            className="w-full bg-white dark:bg-gray-700 border-2 border-primary-green text-primary-green font-black text-sm py-2 rounded-lg hover:bg-primary-green hover:text-white transition-all active:scale-95"
-                        >
-                            {t['ADD']}
+                        <button onClick={() => { const success = addToCart(product, product.stock); if (!success) addToast(`${t['Only']} ${product.stock} ${product.unit} ${t['available']}`, 'warning'); }} className="w-full bg-gradient-to-r from-primary-green to-emerald-600 text-white font-black text-xs py-2.5 rounded-xl shadow-md shadow-primary-green/20 hover:scale-[1.02] active:scale-95 transition-all duration-200">
+                            {t['ADD'] || 'ADD'}
                         </button>
                     ) : (
-                        <div className="flex items-center justify-between bg-primary-green rounded-lg overflow-hidden">
-                            <button
-                                onClick={() => decreaseQuantity(product._id!)}
-                                className="w-10 h-9 flex items-center justify-center text-white font-black text-lg hover:bg-emerald-600 transition-colors active:scale-90"
-                            >
-                                <Minus size={16} />
-                            </button>
-                            <div className="flex-1 text-center">
-                                <span className="text-white font-black text-sm">{cartItem.quantity}</span>
-                                <span className="text-white/70 text-[10px] ml-1">{product.unit}</span>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    const success = increaseQuantity(product._id!, product.stock);
-                                    if (!success) addToast(`${t['Only']} ${product.stock} ${product.unit} ${t['available']}`, 'warning');
-                                }}
-                                className="w-10 h-9 flex items-center justify-center text-white font-black text-lg hover:bg-emerald-600 transition-colors active:scale-90"
-                            >
-                                <Plus size={16} />
-                            </button>
+                        <div className="flex items-center justify-between bg-primary-green text-white rounded-xl overflow-hidden shadow-lg shadow-primary-green/20">
+                            <button onClick={() => decreaseQuantity(product._id!)} className="w-10 h-10 flex items-center justify-center text-white hover:bg-green-600 transition-colors"><Minus size={14} /></button>
+                            <div className="flex-1 text-center font-black text-sm">{cartItem.quantity}</div>
+                            <button onClick={() => { const success = increaseQuantity(product._id!, product.stock); if (!success) addToast(`${t['Only']} ${product.stock} ${product.unit} ${t['available']}`, 'warning'); }} className="w-10 h-10 flex items-center justify-center text-white hover:bg-green-600 transition-colors"><Plus size={14} /></button>
                         </div>
                     )}
                 </div>
             )}
-
             {isOutOfStock && (
-                <div className="absolute inset-0 bg-white/10 dark:bg-black/10 flex items-center justify-center rounded-2xl">
-                    <div className="bg-red-600 text-white text-[10px] font-black px-3 py-1 rounded-lg rotate-[-15deg] shadow-lg ring-2 ring-white">{t['OUT OF STOCK']}</div>
-                </div>
+                <div className="absolute inset-0 bg-white/10 dark:bg-black/10 flex items-center justify-center rounded-2xl"><div className="bg-red-600 text-white text-[10px] font-black px-3 py-1 rounded-lg rotate-[-15deg] shadow-lg ring-2 ring-white">SOLD OUT</div></div>
             )}
         </div>
     );
@@ -184,22 +155,66 @@ const PaymentOptionLabel = React.memo(({ value, currentMethod, onChange, t, titl
 
 export const BillingPage: React.FC = () => {
     const { cart, addToCart, increaseQuantity, decreaseQuantity, updateQuantity, removeFromCart, clearCart, cartTotal } = useCart();
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const { addToast } = useToast();
     const [products, setProducts] = useState<any[]>([]);
     const translatedProducts = useTranslate(products, ['name', 'category']);
     const translatedCart = useTranslate(cart, ['name', 'unit']);
 
-    useSpeechRecognition({
-        onResult: (transcript: string) => {
+    const handleVoiceCommand = React.useCallback((transcript: string) => {
+        const text = transcript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").trim();
+        addToast(`Heard: "${text}"`, 'info');
+        
+        const addKeywords = ['add', 'jodo', 'plus', 'add-karo', 'లగించండి', 'జోడించండి', 'యాడ్', 'చేర్చు'];
+        const removeKeywords = ['remove', 'hatao', 'minus', 'delete', 'తీసేయి', 'తొలగించు'];
+        
+        const isAdd = addKeywords.some(k => text.includes(k));
+        const isRemove = removeKeywords.some(k => text.includes(k));
+
+        if (!isAdd && !isRemove) {
             setSearchTerm(transcript);
-        },
+            return;
+        }
+
+        const match = translatedProducts?.find((p: any) => {
+            const name = p.name.toLowerCase();
+            const cleanedText = text.replace('add', '').replace('remove', '').replace('jodo', '').replace('hatao', '').trim();
+            return text.includes(name) || (cleanedText.length > 2 && name.includes(cleanedText));
+        });
+
+        if (match) {
+            const originalProduct = products.find((p: any) => p._id === match._id);
+            if (!originalProduct) return;
+
+            if (isAdd) {
+                const success = addToCart(originalProduct, originalProduct.stock);
+                if (success) {
+                    addToast(`+ ${match.name}`, 'success');
+                }
+            } else if (isRemove) {
+                const inCart = cart.find(i => i._id === match._id);
+                if (inCart) {
+                    decreaseQuantity(match._id!);
+                    addToast(`- ${match.name}`, 'info');
+                }
+            }
+        } else {
+            const cleanedText = text.replace('add', '').replace('remove', '').replace('jodo', '').replace('hatao', '').trim();
+            addToast(`Not Found: "${cleanedText}"`, 'warning');
+            setSearchTerm(transcript);
+        }
+    }, [translatedProducts, products, addToCart, decreaseQuantity, cart, addToast]);
+
+    const { isListening, startListening, stopListening, isSupported } = useSpeechRecognition({
+        onResult: handleVoiceCommand,
+        lang: language
     });
 
     const [showCheckout, setShowCheckout] = useState(false);
     const [checkoutStep, setCheckoutStep] = useState<'SUMMARY' | 'CUSTOMER' | 'PAYMENT'>('SUMMARY');
     const [paymentMethod, setPaymentMethod] = useState<'cash' | 'online' | 'ledger' | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedCategoryIndex, setSelectedCategoryIndex] = useState<number>(0);
     const [showStatusModal, setShowStatusModal] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [animationType, setAnimationType] = useState<'cash' | 'online' | 'ledger' | null>(null);
@@ -362,10 +377,25 @@ export const BillingPage: React.FC = () => {
             c.phoneNumber.includes(customerInput)) && customerInput.length > 0
     ), [allCustomers, customerInput]);
 
-    const filteredProducts = React.useMemo(() => translatedProducts?.filter(p =>
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))
-    ), [translatedProducts, searchTerm]);
+    const categories = React.useMemo(() => {
+        if (!translatedProducts) return ['All'];
+        const cats = translatedProducts.map((p: any) => p.category).filter(Boolean);
+        return ['All', ...Array.from(new Set(cats))];
+    }, [translatedProducts]);
+
+    const filteredProducts = React.useMemo(() => {
+        let list = translatedProducts || [];
+        const selectedCategory = categories[selectedCategoryIndex];
+
+        if (selectedCategory && selectedCategory !== 'All') {
+            list = list.filter((p: any) => p.category === selectedCategory);
+        }
+
+        return list.filter((p: any) =>
+            p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+    }, [translatedProducts, searchTerm, selectedCategoryIndex, categories]);
 
     const processTransaction = React.useCallback(async (method: 'cash' | 'online' | 'ledger') => {
         if (!selectedCustomer) return false;
@@ -869,33 +899,134 @@ export const BillingPage: React.FC = () => {
         setPartialAmount(0);
     }, []);
 
+    const activeCategory = categories[selectedCategoryIndex] || 'All';
+    
+    const gradients: any = {
+        'All': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Grocery': 'linear-gradient(135deg, #22c55e, #4ade80)',
+        'Dairy': 'linear-gradient(135deg, #60a5fa, #93c5fd)',
+        'Bakery': 'linear-gradient(135deg, #f59e0b, #fbbf24)',
+        'Beverages': 'linear-gradient(135deg, #06b6d4, #67e8f9)',
+        'Food & Beverages': 'linear-gradient(135deg, #06b6d4, #67e8f9)',
+        'Snacks': 'linear-gradient(135deg, #f43f5e, #fb7185)',
+        'Fruits & Vegetables': 'linear-gradient(135deg, #16a34a, #86efac)',
+        'Meat & Seafood': 'linear-gradient(135deg, #dc2626, #f87171)',
+        'Frozen Foods': 'linear-gradient(135deg, #0ea5e9, #bae6fd)',
+        'Personal Care': 'linear-gradient(135deg, #a78bfa, #e9d5ff)',
+        'Household': 'linear-gradient(135deg, #64748b, #cbd5f5)',
+        'Stationery': 'linear-gradient(135deg, #f97316, #fdba74)',
+        'Electronics': 'linear-gradient(135deg, #1e293b, #475569)',
+        'Other': 'linear-gradient(135deg, #9ca3af, #e5e7eb)'
+    };
+
     return (
         <div className="flex flex-col relative bg-gray-50 dark:bg-gray-900 min-h-full">
             {/* Search Bar */}
-            <div className="sticky top-0 p-4 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 space-y-3 z-30">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t.tapToAdd}</h2>
+            <div 
+                className="sticky top-0 p-4 space-y-3 z-30 shadow-md transition-all duration-300"
+                style={{ background: gradients[activeCategory] || gradients['All'] }}
+            >
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-[10px] text-black font-black uppercase tracking-wider">
+                        <MapPin size={14} className="text-black animate-pulse" />
+                        <span>Smart Kirana • Main Bazaar 🏪</span>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-white/25 backdrop-blur-md flex items-center justify-center border border-white/40 text-black">
+                        <User size={16} />
+                    </div>
+                </div>
+                <h2 className="text-xl font-black text-black">{t.tapToAdd}</h2>
+
                 <div className="flex gap-2">
                     <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-3 text-gray-400" size={20} />
+                        <Search className="absolute left-3 top-3.5 text-gray-400" size={18} />
                         <input
                             type="text"
-                            placeholder={t['Search products...']}
+                            placeholder={t['Search products...'] || 'Search products...'}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg p-2 pl-10 placeholder-gray-500 dark:placeholder-gray-400"
+                            className="w-full border-none bg-white text-gray-900 rounded-xl p-2.5 pl-10 placeholder-gray-400 shadow-md focus:ring-1 focus:ring-primary-green outline-none transition-all font-medium text-sm"
                         />
+                        {isSupported && (
+                            <button
+                                onClick={isListening ? stopListening : startListening}
+                                className={`absolute right-2 top-2 w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:text-primary-green'}`}
+                            >
+                                <Mic size={16} className={isListening ? 'animate-bounce' : ''} />
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Category Pills */}
+                {categories.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pt-1 pb-1">
+                        {categories.map((cat, index) => {
+                            const icons: any = {
+                                'All': '🛍️',
+                                'Grocery': '🛒',
+                                'Dairy': '🥛',
+                                'Bakery': '🍞',
+                                'Beverages': '🧃',
+                                'Snacks': '🍿',
+                                'Fruits & Vegetables': '🍎',
+                                'Meat & Seafood': '🥩',
+                                'Frozen Foods': '🧊',
+                                'Personal Care': '🧴',
+                                'Household': '🧹',
+                                'Stationery': '✏️',
+                                'Electronics': '🔌',
+                                'Other': '📦'
+                            };
+                            return (
+                                <button
+                                    key={cat}
+                                    onClick={() => setSelectedCategoryIndex(index)}
+                                    className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all duration-200 transform scale-100 active:scale-95 flex items-center gap-1.5 ${
+                                        selectedCategoryIndex === index
+                                            ? 'text-white shadow-lg scale-105'
+                                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-100 dark:border-gray-700 hover:border-gray-200 hover:-translate-y-0.5'
+                                    }`}
+                                    style={{
+                                        background: selectedCategoryIndex === index ? (gradients[cat] || gradients['All']) : undefined,
+                                        boxShadow: selectedCategoryIndex === index ? '0 10px 15px -3px rgba(0, 0, 0, 0.1)' : undefined
+                                    }}
+                                >
+                                    <span>{icons[cat] || '📦'}</span> {cat === 'All' ? (t['All'] || 'All') : cat}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Smart Insights Banner */}
+            <div className="px-4 mt-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="bg-gradient-to-br from-green-600 to-emerald-800 p-4 rounded-2xl flex items-center justify-between shadow-lg shadow-green-500/10 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -mr-6 -mt-6"></div>
+                    <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/5 rounded-full blur-xl -ml-4 -mb-4"></div>
+                    
+                    <div className="relative z-10">
+                        <div className="text-[10px] font-black uppercase tracking-widest text-green-200 mb-1 flex items-center gap-1">
+                            <span>Smart Billing Insights</span>
+                            <span className="animate-bounce">🧠</span>
+                        </div>
+                        <div className="text-md font-black text-white leading-tight">Recover ₹4,250 pending today</div>
+                        <div className="text-[9px] text-green-200/70 font-bold mt-0.5 flex items-center gap-0.5">Tap to view khata list <ChevronRight size={10} /></div>
+                    </div>
+                    <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/20 relative z-10 shadow-inner">
+                        <Award size={22} className="text-yellow-300" />
                     </div>
                 </div>
             </div>
 
-
             {/* Product Grid */}
             <div className="p-4 pb-48">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                    {filteredProducts?.map(product => (
-                        <BillingProductCard
-                            key={product._id}
-                            product={product}
+                    {filteredProducts?.map((product, index) => (
+                        <div key={product._id} className="animate-in fade-in slide-in-from-bottom-3 duration-300" style={{ animationDelay: `${Math.min(index * 70, 700)}ms`, animationFillMode: 'backwards' }}>
+                            <BillingProductCard
+                                product={product}
                             t={t}
                             cartItem={cart.find(item => item._id === product._id)}
                             addToCart={addToCart}
@@ -903,6 +1034,7 @@ export const BillingPage: React.FC = () => {
                             decreaseQuantity={decreaseQuantity}
                             addToast={addToast}
                         />
+                        </div>
                     ))}
                 </div>
             </div>
@@ -912,42 +1044,20 @@ export const BillingPage: React.FC = () => {
                 <div className="fixed bottom-24 left-4 right-4 md:bottom-6 md:left-72 md:right-8 z-40 animate-slide-up">
                     <button
                         onClick={() => setShowCheckout(true)}
-                        className="w-full relative overflow-hidden rounded-2xl text-white p-0 shadow-2xl active:scale-[0.97] transition-transform duration-150"
-                        style={{
-                            background: 'linear-gradient(135deg, #1B5E20 0%, #2E7D32 45%, #388E3C 100%)',
-                            boxShadow: '0 8px 32px rgba(46,125,50,0.45), 0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.12)'
-                        }}
+                        className="w-full relative overflow-hidden rounded-2xl bg-gradient-to-r from-green-600 to-emerald-700 text-white p-4 shadow-2xl flex items-center justify-between active:scale-[0.98] transition-all duration-150"
                     >
-                        {/* shimmer sweep */}
-                        <div
-                            className="absolute inset-0 pointer-events-none"
-                            style={{
-                                background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.08) 50%, transparent 60%)',
-                                backgroundSize: '200% 100%',
-                                animation: 'shimmer 2.5s infinite linear'
-                            }}
-                        />
-                        <div className="relative flex items-center justify-between px-5 py-4">
-                            {/* left: badge + label */}
-                            <div className="flex items-center gap-3">
-                                <div
-                                    className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm"
-                                    style={{ background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(4px)' }}
-                                >
-                                    {cart.reduce((a, b) => a + b.quantity, 0)}
-                                </div>
-                                <div>
-                                    <div className="font-black text-base tracking-tight leading-none">{t.viewCart}</div>
-                                    <div className="text-white/60 text-[11px] font-semibold mt-0.5">
-                                        {cart.length} {cart.length === 1 ? 'item' : 'items'}
-                                    </div>
-                                </div>
+                        <div className="flex items-center gap-3">
+                            <div className="bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-xl font-black text-sm flex items-center gap-1">
+                                <span>{cart.reduce((a, b) => a + b.quantity, 0)}</span>
+                                <span className="text-[10px] opacity-60">items</span>
                             </div>
-                            {/* right: total */}
-                            <div className="flex items-center gap-2">
-                                <span className="font-black text-2xl tracking-tight">₹{cartTotal}</span>
-                                <ChevronRight size={20} className="text-white/70" />
+                            <div className="flex flex-col items-start">
+                                <span className="text-xs opacity-80 uppercase font-black tracking-wider">{t['Total Price'] || 'Total'}</span>
+                                <span className="font-black text-xl tracking-tight leading-none">₹{cartTotal}</span>
                             </div>
+                        </div>
+                        <div className="flex items-center gap-1 font-black text-sm bg-white/10 px-3 py-2 rounded-xl backdrop-blur-md shadow-inner border border-white/5">
+                            {t['View Bill'] || 'View Bill'} <ChevronRight size={16} />
                         </div>
                     </button>
                 </div>
@@ -1639,6 +1749,23 @@ export const BillingPage: React.FC = () => {
                     </div>
                 )
             }
+            {isSupported && (
+                <div className="fixed bottom-48 right-4 z-50 flex flex-col items-end gap-2">
+                    <div className="bg-gray-900 dark:bg-gray-800 text-white text-[10px] font-black px-2.5 py-1.5 rounded-xl shadow-2xl animate-bounce border border-gray-700/50">
+                        Try: "Add Sugar" 🎙️
+                    </div>
+                    <button
+                        onClick={isListening ? stopListening : startListening}
+                        className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 relative ${isListening ? 'bg-red-500 text-white animate-pulse shadow-red-500/50' : 'bg-gradient-to-br from-primary-green to-emerald-600 text-white hover:scale-105 active:scale-95 shadow-primary-green/30'}`}
+                    >
+                        {isListening && (
+                            <div className="absolute inset-0 rounded-full bg-red-500/30 animate-ping"></div>
+                        )}
+                        <Mic size={24} />
+                    </button>
+                </div>
+            )}
+
             {showRiskConfirmation && (
                 <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-gray-800 rounded-[2rem] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in duration-200">

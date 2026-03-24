@@ -178,7 +178,7 @@ export default function RecoveryPage() {
                         displayCustomers.map((customer: any) => (
                             viewMode === 'SCHEDULED' ? (
                                 // === SCHEDULED CARD ===
-                                <div key={customer.id} className="bg-white dark:bg-[#111111] p-4 rounded-[1.2rem] border border-gray-100 dark:border-white/5 flex items-center justify-between gap-4 shadow-sm h-22">
+                                <div key={customer.id} className="bg-white dark:bg-[#111111] p-4 rounded-[1.2rem] border border-gray-100 dark:border-white/5 flex items-center justify-between gap-4 shadow-sm">
                                     <div className="flex items-center gap-4 flex-1">
                                         <div className="shrink-0 flex flex-col items-center justify-center bg-gray-50 dark:bg-white/5 w-12 h-12 rounded-xl border border-gray-100 dark:border-white/10 text-primary-green">
                                             <span className="text-[8px] uppercase font-black opacity-60">
@@ -191,7 +191,7 @@ export default function RecoveryPage() {
                                         <div className="min-w-0">
                                             <h3 className="font-black text-gray-900 dark:text-white text-sm truncate">{customer.name}</h3>
                                             <div className="flex items-center gap-2 mt-0.5">
-                                                <span className="text-xs font-black text-primary-green">₹{customer.amount.toLocaleString()}</span>
+                                                <span className="text-xs font-black text-primary-green w-16 shrink-0">₹{customer.amount.toLocaleString()}</span>
                                                 <span className="text-[9px] text-gray-400 font-bold uppercase flex items-center gap-1">
                                                     <Clock3 size={10} /> {customer.nextCallDate ? new Date(customer.nextCallDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                                 </span>
