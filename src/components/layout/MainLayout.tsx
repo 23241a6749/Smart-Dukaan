@@ -1,147 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Outlet, NavLink } from 'react-router-dom';
-import { Store, Users, Package, TrendingUp, CreditCard, Menu, X, Gift, BookOpen, LogOut, Phone, MessageCircle, Landmark, Loader2 } from 'lucide-react';
+import { Store, Users, Package, TrendingUp, CreditCard, Menu, X, Gift, BookOpen, LogOut, Phone, MessageCircle, Landmark } from 'lucide-react';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 import { UserProfileModal } from '../UserProfileModal';
-
-const PullToRefresh: React.FC<{ children: React.ReactNode; darkMode: boolean }> = ({ children, darkMode }) => {
-    const [isRefreshing, setIsRefreshing] = useState(false);
-    const [pullDistance, setPullDistance] = useState(0);
-    const startY = useRef(0);
-    const currentY = useRef(0);
-    const isPulling = useRef(false);
-    const contentRef = useRef<HTMLDivElement>(null);
-
-    const handleTouchStart = (e: React.TouchEvent) => {
-        if (window.scrollY === 0) {
-            startY.current = e.touches[0].clientY;
-            isPulling.current = true;
-        }
-    };
-
-    const handleTouchMove = (e: React.TouchEvent) => {
-        if (!isPulling.current || window.scrollY > 0) return;
-        
-        currentY.current = e.touches[0].clientY;
-        const diff = currentY.current - startY.current;
-        
-        if (diff > 0) {
-            setPullDistance(Math.min(diff * 0.5, 100));
-            e.preventDefault();
-        }
-    };
-
-    const handleTouchEnd = useCallback(() => {
-        if (pullDistance > 60) {
-            setIsRefreshing(true);
-            setTimeout(() => {
-                window.location.reload();
-            }, 800);
-        }
-        setPullDistance(0);
-        isPulling.current = false;
-        startY.current = 0;
-        currentY.current = 0;
-    }, [pullDistance]);
-
-    useEffect(() => {
-        if (!isRefreshing) return;
-        const timer = setTimeout(() => setIsRefreshing(false), 2500);
-        return () => clearTimeout(timer);
-    }, [isRefreshing]);
-
-    const canRelease = pullDistance > 60;
-
-    return (
-        <div 
-            className="relative overflow-hidden"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            ref={contentRef}
-        >
-            {/* Pull Indicator - Modern iOS Style */}
-            <motion.div 
-                className="absolute top-0 left-0 right-0 h-28 flex flex-col items-center justify-end pb-4"
-                animate={{ 
-                    opacity: pullDistance > 0 ? 1 : 0,
-                    y: pullDistance > 0 ? 0 : -20
-                }}
-                transition={{ duration: 0.2 }}
-                style={{
-                    background: darkMode 
-                        ? 'linear-gradient(180deg, #0a0a0a 0%, transparent 100%)' 
-                        : 'linear-gradient(180deg, #ffffff 0%, transparent 100%)'
-                }}
-            >
-                {/* Animated Circle with Bounce */}
-                <motion.div
-                    className="relative"
-                    animate={isRefreshing ? { scale: 1 } : canRelease ? { scale: 1.1 } : { scale: 0.9 }}
-                    transition={isRefreshing ? { duration: 0.5, repeat: Infinity, repeatType: "reverse" } : { type: "spring", stiffness: 300, damping: 20 }}
-                >
-                    <motion.div
-                        animate={isRefreshing ? { rotate: 360 } : { rotate: [0, -30, 30, 0] }}
-                        transition={isRefreshing ? { duration: 1, repeat: Infinity, ease: "linear" } : { duration: 0.6, repeat: 0 }}
-                        className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg ${
-                            canRelease || isRefreshing 
-                                ? 'bg-primary-green' 
-                                : darkMode ? 'bg-gray-700' : 'bg-gray-200'
-                        }`}
-                    >
-                        {isRefreshing ? (
-                            <Loader2 size={24} className="text-white animate-spin" />
-                        ) : (
-                            <motion.svg 
-                                viewBox="0 0 24 24" 
-                                className={`w-6 h-6 ${canRelease ? 'text-white' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}
-                                animate={{ y: canRelease ? 2 : 0 }}
-                            >
-                                <path 
-                                    fill="currentColor" 
-                                    d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
-                                />
-                            </motion.svg>
-                        )}
-                    </motion.div>
-                </motion.div>
-
-                {/* Status Text */}
-                <motion.div 
-                    className="mt-2"
-                    animate={{ opacity: pullDistance > 10 ? 1 : 0, y: pullDistance > 10 ? 0 : 10 }}
-                >
-                    <span className={`text-xs font-bold ${canRelease ? 'text-primary-green' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {isRefreshing ? 'Refreshing...' : canRelease ? 'Release to refresh' : 'Pull to refresh'}
-                    </span>
-                </motion.div>
-            </motion.div>
-
-            {/* Progress Indicator - Glowing Line */}
-            <motion.div 
-                className="absolute top-0 left-0 h-1"
-                style={{
-                    width: isRefreshing ? '100%' : `${Math.min(pullDistance * 2.5, 100)}%`,
-                    background: canRelease 
-                        ? 'linear-gradient(90deg, #22c55e, #4ade80)' 
-                        : 'linear-gradient(90deg, #22c55e, #22c55e)',
-                    boxShadow: canRelease ? '0 0 10px #22c55e, 0 0 20px #22c55e' : 'none',
-                }}
-            />
-
-            <motion.div 
-                animate={{ y: isRefreshing ? 0 : pullDistance * 0.4 }}
-                transition={{ type: "spring", stiffness: 200, damping: 25 }}
-            >
-                {children}
-            </motion.div>
-        </div>
-    );
-};
 
 export const MainLayout: React.FC = () => {
     const { user, logout } = useAuth();
@@ -341,13 +206,11 @@ export const MainLayout: React.FC = () => {
                     )}
                 </AnimatePresence>
 
-                {/* Content Area with Pull to Refresh */}
+                {/* Content Area */}
                 <main className="flex-1 overflow-y-auto relative custom-scrollbar flex justify-center">
-                    <PullToRefresh darkMode={darkMode}>
-                        <div className="w-full max-w-5xl p-4 md:p-8 pb-32">
-                            <Outlet />
-                        </div>
-                    </PullToRefresh>
+                    <div className="w-full max-w-5xl p-4 md:p-8 pb-32">
+                        <Outlet />
+                    </div>
                 </main>
 
                 {/* Global Bottom Navigation */}
