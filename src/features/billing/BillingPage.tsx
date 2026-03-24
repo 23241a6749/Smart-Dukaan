@@ -9,7 +9,7 @@ import type { Customer } from '../../services/api';
 import { db } from '../../db/db';
 import type { Customer as LocalCustomer } from '../../db/db';
 import { recalculateKhataScore, SCORE_DEFAULT, calculateKhataLimit, getKhataStatus, type KhataExplanation } from '../../lib/khataLogic';
-import { Search, User, Phone, X, ChevronRight, Minus, Plus, Trash2, Award, Download, Share2, MessageCircle, Mic, MapPin, Loader2 } from 'lucide-react';
+import { Search, User, Phone, X, ChevronRight, Minus, Plus, Trash2, Award, Download, Share2, MessageCircle, Mic, Loader2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useTranslate } from '../../hooks/useTranslate';
@@ -17,6 +17,7 @@ import { useProductUsage } from '../../hooks/useProductUsage';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../../components/PullToRefreshIndicator';
 import { aiApi } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5001';
 
@@ -161,6 +162,7 @@ export const BillingPage: React.FC = () => {
     const { cart, addToCart, increaseQuantity, decreaseQuantity, updateQuantity, removeFromCart, clearCart, cartTotal } = useCart();
     const { t, language } = useLanguage();
     const { addToast } = useToast();
+    const { user } = useAuth();
     const { recordUsage, sortProducts } = useProductUsage();
     const [products, setProducts] = useState<any[]>([]);
     const translatedProducts = useTranslate(products, ['name', 'category']);
@@ -997,12 +999,11 @@ export const BillingPage: React.FC = () => {
                 className="relative pt-4 pb-12 transition-colors duration-500"
                 style={{ background: gradients[activeCategory] || gradients['All'] }}
             >
-                {/* Shop Metadata & User */}
-                <div className="px-4 flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-1.5 text-[10px] text-black font-black uppercase tracking-wider">
-                        <MapPin size={14} className="text-black animate-pulse" />
-                        <span>Smart Kirana • Main Bazaar 🏪</span>
-                    </div>
+                {/* Personalized Greeting Header */}
+                <div className="px-4 flex items-center justify-between mb-3 pt-2">
+                    <h1 className="text-lg font-black text-gray-900 tracking-tight animate-in slide-in-from-left duration-500">
+                        Hey {user?.name?.split(' ')[0] || 'Member'}! 👋
+                    </h1>
                     <div className="w-8 h-8 rounded-full bg-white/30 backdrop-blur-md flex items-center justify-center border border-white/40 text-black shadow-sm">
                         <User size={16} />
                     </div>
