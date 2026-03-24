@@ -528,15 +528,61 @@ async function sendStatusUpdateOnWhatsApp(order: any, status: string) {
     return { attempted: true, sent: true };
 }
 
+// WhatsApp webhook GET handler for Twilio verification
+router.get('/webhook', async (req: any, res) => {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+    
+    const verifyToken = process.env.TWILIO_WEBHOOK_VERIFY_TOKEN || 'whatsapp_verify_token';
+    
+    if (mode === 'subscribe' && token === verifyToken) {
+        console.log('[WhatsApp] Webhook verified successfully');
+        res.status(200).send(challenge);
+    } else {
+        console.log('[WhatsApp] Webhook verification failed');
+        res.status(403).send('Forbidden');
+    }
+});
+
 router.post('/webhook', async (req: any, res) => {
     const twiml = new MessagingResponse();
 
     try {
+        // Handle Twilio status callback - no need to process these
+        const messageStatus = req.body.MessageStatus;
+        if (messageStatus) {
+            console.log(`[WhatsApp] Status callback: ${messageStatus} for message ${req.body.MessageSid || 'unknown'}`);
+            res.status(200).send(twiml.toString());
+            return;
+        }
+
         const from = String(req.body.From || '');
         const rawBody = String(req.body.Body || '').trim();
         const numMedia = Number.parseInt(String(req.body.NumMedia || '0'), 10);
         const mediaType = String(req.body.MediaContentType0 || '');
         const mediaUrl = String(req.body.MediaUrl0 || '');
+
+        // Early return for empty messages (Twilio status checks, heartbeats, etc.)
+        if (!from && !rawBody && numMedia === 0) {
+            console.log('[WhatsApp] Ignoring empty webhook request (status/heartbeat)');
+            res.status(200).send(twiml.toString());
+            return;
+        }
+
+        // If from is empty but there's a status, handle gracefully
+        if (!from) {
+            console.log('[WhatsApp] Ignoring webhook without sender (status update)');
+            res.status(200).send(twiml.toString());
+            return;
+        }
+
+        // Skip processing for empty text with no media
+        if (!rawBody && numMedia === 0) {
+            console.log(`[WhatsApp] Ignoring empty message from ${from}`);
+            res.status(200).send(twiml.toString());
+            return;
+        }
 
         const shopkeeperId = await getDefaultShopkeeperId();
         if (!shopkeeperId) {

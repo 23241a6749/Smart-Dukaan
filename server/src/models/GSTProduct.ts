@@ -5,6 +5,7 @@ export interface IGSTProduct extends Document {
     hsnCode: string;
     gstRate: number;       // e.g. 0, 5, 12, 18, 28
     category: string;
+    icon?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -15,6 +16,7 @@ const gstProductSchema = new Schema<IGSTProduct>(
         hsnCode: { type: String, required: true },
         gstRate: { type: Number, required: true, default: 5 },
         category: { type: String, required: true },
+        icon: { type: String, default: '📦' },
     },
     { timestamps: true }
 );

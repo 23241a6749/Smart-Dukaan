@@ -4,7 +4,7 @@ import { useCart } from '../../contexts/CartContext';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useSpeechRecognition } from '../../hooks/useSpeechRecognition';
-import { productApi, customerApi, billApi } from '../../services/api';
+import { productApi, customerApi, billApi, ledgerApi } from '../../services/api';
 import type { Customer } from '../../services/api';
 import { db } from '../../db/db';
 import type { Customer as LocalCustomer } from '../../db/db';
@@ -208,6 +208,12 @@ export const BillingPage: React.FC = () => {
     const [otpLoading, setOtpLoading] = useState(false);
     const [latestBillId, setLatestBillId] = useState<string | null>(null);
     const [sendingBillWhatsApp, setSendingBillWhatsApp] = useState(false);
+
+    // Partial Khata Payment states
+    const [partialPaymentStep, setPartialPaymentStep] = useState<'NONE' | 'AMOUNT' | 'METHOD' | 'PROCESSING' | 'SUCCESS'>('NONE');
+    const [partialAmount, setPartialAmount] = useState<number>(0);
+
+    const [showRiskConfirmation, setShowRiskConfirmation] = useState(false);
 
     // Customer identification states
     const [customerInput, setCustomerInput] = useState('');
@@ -529,13 +535,14 @@ export const BillingPage: React.FC = () => {
         }
     }, [selectedCustomer, cartTotal, cart, t, addToast, loadProducts]);
 
-    const handleLedgePayment = React.useCallback(async () => {
-        if (khataInfo && cartTotal > khataInfo.availableCredit) {
-            addToast(`${t['Credit Limit Exceeded!']} ${t['Available']}: ₹${khataInfo.availableCredit}`, 'error');
+    const handleLedgePayment = React.useCallback(async (skipRiskConfirmation = false) => {
+        if (!selectedCustomer) return;
+
+        // If Strong Risk, ask for confirmation once
+        if (!skipRiskConfirmation && khataInfo?.riskLevel === 'STRONG') {
+            setShowRiskConfirmation(true);
             return;
         }
-
-        if (!selectedCustomer) return;
 
         setAnimationType('ledger');
         setShowStatusModal(true);
@@ -616,6 +623,130 @@ export const BillingPage: React.FC = () => {
             setOtp('');
         }
     }, [selectedCustomer, otp, cart, cartTotal, t, addToast, loadProducts]);
+
+    const handlePartialCashPayment = async (amount: number) => {
+        if (!selectedCustomer) return;
+        setPartialPaymentStep('PROCESSING');
+        try {
+            await (ledgerApi as any).recordPayment({
+                customerId: selectedCustomer._id,
+                amount: amount,
+                paymentMode: 'cash'
+            });
+
+            const customer = await db.customers.where('phoneNumber').equals(selectedCustomer.phoneNumber).first();
+            if (customer) {
+                await db.customers.update(customer.id!, {
+                    khataBalance: Math.max(0, (customer.khataBalance || 0) - amount),
+                    activeKhataAmount: Math.max(0, (customer.activeKhataAmount || 0) - amount)
+                });
+
+                await db.ledger.add({
+                    customerId: selectedCustomer.phoneNumber,
+                    amount: amount,
+                    paymentMode: 'CASH',
+                    type: 'credit',
+                    status: 'PAID',
+                    createdAt: Date.now()
+                });
+
+                await recalculateKhataScore(selectedCustomer.phoneNumber);
+            }
+
+            setSelectedCustomer(prev => prev ? ({
+                ...prev,
+                khataBalance: Math.max(0, (prev.khataBalance || 0) - amount),
+                activeKhataAmount: Math.max(0, (prev.activeKhataAmount || 0) - amount)
+            } as any) : null);
+
+            addToast('Partial Cash Payment Recorded', 'success');
+            setPartialPaymentStep('SUCCESS');
+        } catch (err: any) {
+            console.error(err);
+            addToast(err.response?.data?.message || 'Failed to record cash payment', 'error');
+            setPartialPaymentStep('METHOD');
+        }
+    };
+
+    const handlePartialUpiPayment = async (amount: number) => {
+        if (!selectedCustomer) return;
+        setPartialPaymentStep('PROCESSING');
+        try {
+            const amountInPaise = amount * 100;
+            const res = await (billApi as any).createRazorpayOrder(amountInPaise);
+            const { orderId, keyId } = res.data;
+
+            const options = {
+                key: keyId,
+                amount: amountInPaise,
+                currency: "INR",
+                name: "SDukaan Partial Payment",
+                description: "Khata balance reduction",
+                order_id: orderId,
+                handler: async function (response: any) {
+                    try {
+                        setPartialPaymentStep('PROCESSING');
+                        await ledgerApi.verifyRazorpayPayment({
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                            customerId: selectedCustomer._id,
+                            amount: amount
+                        });
+
+                        const customer = await db.customers.where('phoneNumber').equals(selectedCustomer.phoneNumber).first();
+                        if (customer) {
+                            await db.customers.update(customer.id!, {
+                                khataBalance: Math.max(0, (customer.khataBalance || 0) - amount),
+                                activeKhataAmount: Math.max(0, (customer.activeKhataAmount || 0) - amount)
+                            });
+
+                            await db.ledger.add({
+                                customerId: selectedCustomer.phoneNumber,
+                                amount: amount,
+                                paymentMode: 'UPI',
+                                type: 'credit',
+                                status: 'PAID',
+                                createdAt: Date.now()
+                            });
+
+                            await recalculateKhataScore(selectedCustomer.phoneNumber);
+                        }
+
+                        setSelectedCustomer(prev => prev ? ({
+                            ...prev,
+                            khataBalance: Math.max(0, (prev.khataBalance || 0) - amount),
+                            activeKhataAmount: Math.max(0, (prev.activeKhataAmount || 0) - amount)
+                        } as any) : null);
+
+                        addToast('Partial UPI Payment Successful!', 'success');
+                        setPartialPaymentStep('SUCCESS');
+                    } catch (verifyErr: any) {
+                        console.error('[Razorpay Verify Error]', verifyErr);
+                        addToast('Payment Verification Failed', 'error');
+                        setPartialPaymentStep('METHOD');
+                    }
+                },
+                prefill: {
+                    name: selectedCustomer.name || "",
+                    contact: selectedCustomer.phoneNumber.replace("+91", "")
+                },
+                theme: { color: "#16a34a" },
+                modal: { ondismiss: () => setPartialPaymentStep('METHOD') }
+            };
+
+            const rzp = new (window as any).Razorpay(options);
+            rzp.on('payment.failed', (response: any) => {
+                addToast(response.error.description || 'Payment Failed', 'error');
+                setPartialPaymentStep('METHOD');
+            });
+            rzp.open();
+        } catch (err: any) {
+            console.error(err);
+            addToast('Failed to initialize UPI payment', 'error');
+            setPartialPaymentStep('METHOD');
+        }
+    };
 
     const generateBillPDF = React.useCallback(() => {
         const doc = new jsPDF();
@@ -734,6 +865,8 @@ export const BillingPage: React.FC = () => {
         setShowOtpInput(false);
         setLatestBillId(null);
         setSendingBillWhatsApp(false);
+        setPartialPaymentStep('NONE');
+        setPartialAmount(0);
     }, []);
 
     return (
@@ -1069,31 +1202,49 @@ export const BillingPage: React.FC = () => {
                             )}
 
                             {khataInfo && (
-                                <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-primary-green/5 to-primary-green/20 border border-primary-green/20">
+                                <div className={`mb-6 p-4 rounded-2xl bg-gradient-to-br border shadow-sm transition-all duration-300 ${khataInfo.riskLevel === 'STRONG'
+                                    ? 'from-red-50 to-red-100 border-red-200 dark:from-red-900/20 dark:to-red-800/20 dark:border-red-800'
+                                    : khataInfo.riskLevel === 'SOFT'
+                                        ? 'from-orange-50 to-orange-100 border-orange-200 dark:from-orange-900/20 dark:to-orange-800/20 dark:border-orange-800'
+                                        : 'from-primary-green/5 to-primary-green/20 border-primary-green/20'
+                                    }`}>
                                     <div className="flex justify-between items-center mb-3">
                                         <div className="flex items-center gap-2">
-                                            <Award className="text-primary-green" size={20} />
+                                            <Award className={khataInfo.riskLevel === 'STRONG' ? 'text-red-500' : khataInfo.riskLevel === 'SOFT' ? 'text-orange-500' : 'text-primary-green'} size={20} />
                                             <span className="font-black text-gray-900 dark:text-white uppercase tracking-tighter">{t['Udhaar Score']}</span>
                                         </div>
-                                        <span className={`text-2xl font-black ${khataInfo.score >= 700 ? 'text-green-600' : khataInfo.score >= 500 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                            {khataInfo.score}
-                                        </span>
+                                        <div className="text-right">
+                                            <div className={`text-2xl font-black ${khataInfo.score >= 700 ? 'text-green-600' : khataInfo.score >= 500 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                                {khataInfo.score}
+                                            </div>
+                                            <div className={`text-[10px] font-black uppercase tracking-widest ${khataInfo.riskLevel === 'STRONG' ? 'text-red-600' : khataInfo.riskLevel === 'SOFT' ? 'text-orange-600' : 'text-green-600'}`}>
+                                                {khataInfo.riskLevel} RISK
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className="space-y-2">
                                         <div className="flex justify-between text-sm">
                                             <span className="text-gray-500 font-bold">{t['Available Credit']}:</span>
-                                            <span className="font-black text-gray-900 dark:text-white">₹{khataInfo.availableCredit} / ₹{khataInfo.limit}</span>
+                                            <span className={`font-black ${khataInfo.availableCredit - cartTotal < 0 ? 'text-red-600' : 'text-gray-900 dark:text-white'}`}>
+                                                ₹{Math.max(0, khataInfo.availableCredit - cartTotal)} / ₹{khataInfo.limit}
+                                                {khataInfo.availableCredit - cartTotal < 0 && (
+                                                    <span className="text-[10px] ml-1 uppercase">(Exceeded by ₹{Math.abs(khataInfo.availableCredit - cartTotal)})</span>
+                                                )}
+                                            </span>
                                         </div>
-                                        <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden">
+                                        <div className="w-full bg-gray-200 dark:bg-gray-700 h-2 rounded-full overflow-hidden flex">
                                             <div
-                                                className="h-full bg-primary-green transition-all duration-500"
-                                                style={{ width: `${(khataInfo.score - 300) / 600 * 100}%` }}
+                                                className={`h-full transition-all duration-700 ${khataInfo.availableCredit - cartTotal < 0 ? 'bg-red-500 animate-pulse-fast' : 'bg-primary-green'
+                                                    }`}
+                                                style={{ width: `${Math.max(0, Math.min(100, ((khataInfo.availableCredit - cartTotal) / (khataInfo.limit || 1)) * 100))}%` }}
                                             />
                                         </div>
-                                        {khataInfo.reasons.length > 0 && (
-                                            <p className="text-[10px] text-gray-500 leading-tight italic mt-2">
-                                                💡 {khataInfo.reasons[0]}
-                                            </p>
+                                        {(khataInfo.riskMessage || khataInfo.reasons.length > 0) && (
+                                            <div className={`mt-3 p-3 bg-white/50 dark:bg-black/20 rounded-lg ${khataInfo.riskLevel !== 'LOW' ? 'animate-pulse-fast shadow-md shadow-red-200' : ''}`}>
+                                                <p className={`text-xs font-black leading-tight ${khataInfo.riskLevel === 'STRONG' ? 'text-red-700 dark:text-red-300' : khataInfo.riskLevel === 'SOFT' ? 'text-orange-700 dark:text-orange-300' : 'text-gray-500'}`}>
+                                                    {khataInfo.riskLevel !== 'LOW' ? `⚠️ ${khataInfo.riskMessage}` : `💡 ${khataInfo.reasons[0]}`}
+                                                </p>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -1127,7 +1278,6 @@ export const BillingPage: React.FC = () => {
                                             t={t}
                                             title="Udhaar (Credit)"
                                             description="Pay on credit"
-                                            disabled={khataInfo !== null && cartTotal > khataInfo.availableCredit}
                                             cartTotal={cartTotal}
                                             khataInfo={khataInfo}
                                         />
@@ -1144,10 +1294,10 @@ export const BillingPage: React.FC = () => {
 
                                 {/* Make Payment Button */}
                                 <button
-                                    onClick={paymentMethod === 'online' ? handleUpiPayment : paymentMethod === 'cash' ? handleCashPayment : handleLedgePayment}
-                                    disabled={!paymentMethod || (paymentMethod === 'ledger' && khataInfo !== null && cartTotal > khataInfo.availableCredit)}
+                                    onClick={paymentMethod === 'online' ? handleUpiPayment : paymentMethod === 'cash' ? handleCashPayment : () => handleLedgePayment()}
+                                    disabled={!paymentMethod}
                                     className="w-full relative overflow-hidden rounded-2xl text-white py-5 font-black text-lg active:scale-[0.97] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
-                                    style={!paymentMethod || (paymentMethod === 'ledger' && khataInfo !== null && cartTotal > khataInfo.availableCredit)
+                                    style={!paymentMethod
                                         ? { background: '#374151' }
                                         : paymentMethod === 'cash'
                                             ? {
@@ -1331,52 +1481,196 @@ export const BillingPage: React.FC = () => {
                                         <span className="text-6xl text-white">✓</span>
                                     </div>
                                     <h3 className="text-3xl font-black text-gray-900 dark:text-white mb-2">{t['Success!']}</h3>
-                                    <p className="text-gray-500 dark:text-gray-400 font-bold uppercase tracking-widest text-xs">{t['Payment Received']}</p>
+                                    <p className="text-gray-500 dark:text-gray-400 font-bold uppercase tracking-widest text-xs">
+                                        {animationType === 'ledger' ? t['Udhaar Recorded'] : t['Payment Received']}
+                                    </p>
 
                                     <div className="mt-8 pt-8 border-t border-gray-100 dark:border-gray-700">
                                         <div className="text-4xl font-black text-gray-900 dark:text-white">₹{cartTotal}</div>
-                                        <div className="text-[10px] text-gray-400 font-bold mt-1 uppercase">{t['Total Amount Paid']}</div>
+                                        <div className="text-[10px] text-gray-400 font-bold mt-1 uppercase">
+                                            {animationType === 'ledger' ? t['Total Bill Amount'] : t['Total Amount Paid']}
+                                        </div>
                                     </div>
 
-                                    <div className="grid grid-cols-3 gap-3 mt-6">
+                                    {/* Partial Khata Payment Add-on */}
+                                    {animationType === 'ledger' && partialPaymentStep !== 'SUCCESS' && (
+                                        <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700 space-y-4">
+                                            {partialPaymentStep === 'NONE' && (
+                                                <button
+                                                    onClick={() => setPartialPaymentStep('AMOUNT')}
+                                                    className="w-full relative group overflow-hidden bg-white dark:bg-gray-800 border-2 border-primary-green/30 hover:border-primary-green p-4 rounded-3xl transition-all active:scale-95 shadow-lg shadow-green-500/5 hover:shadow-green-500/10"
+                                                >
+                                                    <div className="flex items-center justify-between relative z-10">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 bg-primary-green/10 rounded-2xl flex items-center justify-center text-xl">
+                                                                💰
+                                                            </div>
+                                                            <div className="text-left">
+                                                                <p className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">{t['Pay Partial Amount']}</p>
+                                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t['Reduce Udhaar Now']}</p>
+                                                            </div>
+                                                        </div>
+                                                        <ChevronRight className="text-primary-green" size={20} />
+                                                    </div>
+                                                </button>
+                                            )}
+
+                                            {partialPaymentStep === 'AMOUNT' && (
+                                                <div className="space-y-3 animate-in fade-in slide-in-from-bottom duration-200 text-left">
+                                                    <div className="flex justify-between items-center text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                                        <span>{t['Partial Amount']}</span>
+                                                        <span className="text-primary-green">MAX ₹{cartTotal}</span>
+                                                    </div>
+                                                    <div className="relative">
+                                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-bold text-gray-400">₹</span>
+                                                        <input
+                                                            type="number"
+                                                            autoFocus
+                                                            className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-700 py-4 pl-10 pr-4 rounded-2xl text-2xl font-black text-gray-900 dark:text-white outline-none focus:border-primary-green"
+                                                            placeholder="0"
+                                                            value={partialAmount || ''}
+                                                            onChange={(e) => setPartialAmount(Math.min(cartTotal, Number(e.target.value)))}
+                                                        />
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => setPartialPaymentStep('NONE')}
+                                                            className="flex-1 py-3 text-gray-500 font-bold text-sm"
+                                                        >
+                                                            {t['Back']}
+                                                        </button>
+                                                        <button
+                                                            disabled={!partialAmount || partialAmount <= 0}
+                                                            onClick={() => setPartialPaymentStep('METHOD')}
+                                                            className="flex-[2] bg-primary-green text-white py-3 rounded-xl font-black shadow-lg disabled:opacity-50 text-sm"
+                                                        >
+                                                            {t['Next']}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {partialPaymentStep === 'METHOD' && (
+                                                <div className="space-y-3 animate-in fade-in slide-in-from-bottom duration-200">
+                                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t['Select Payment Method']}</p>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <button
+                                                            onClick={() => handlePartialCashPayment(partialAmount)}
+                                                            className="flex flex-col items-center gap-2 p-4 bg-green-50 dark:bg-green-900/20 border-2 border-green-200 rounded-2xl hover:bg-green-100 transition-all"
+                                                        >
+                                                            <span className="text-2xl">💵</span>
+                                                            <span className="text-[10px] font-black text-green-700 uppercase">{t['Cash']}</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handlePartialUpiPayment(partialAmount)}
+                                                            className="flex flex-col items-center gap-2 p-4 bg-purple-50 dark:bg-purple-900/20 border-2 border-purple-200 rounded-2xl hover:bg-purple-100 transition-all"
+                                                        >
+                                                            <span className="text-2xl">📲</span>
+                                                            <span className="text-[10px] font-black text-purple-700 uppercase">{t['UPI']}</span>
+                                                        </button>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setPartialPaymentStep('AMOUNT')}
+                                                        className="w-full py-2 text-gray-400 text-[10px] font-bold uppercase"
+                                                    >
+                                                        {t['Change Amount']}
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            {partialPaymentStep === 'PROCESSING' && (
+                                                <div className="py-8 flex flex-col items-center gap-4">
+                                                    <div className="w-10 h-10 border-4 border-primary-green border-t-transparent rounded-full animate-spin" />
+                                                    <p className="text-sm font-bold text-gray-500 animate-pulse">{t['Processing Payment...']}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {partialPaymentStep === 'SUCCESS' && (
+                                        <div className="mt-8 p-6 bg-green-50 dark:bg-green-900/20 border border-green-200 rounded-3xl animate-in zoom-in duration-300">
+                                            <p className="text-green-700 dark:text-green-300 font-black text-lg">
+                                                ✅ ₹{partialAmount} {t['Payment Received!']}
+                                            </p>
+                                            <p className="text-xs text-green-600/70 font-bold uppercase mt-1">
+                                                {t['Updated Balance']}: ₹{cartTotal - partialAmount}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-3 gap-3 mt-8">
                                         <button
                                             onClick={handleDownloadPDF}
-                                            className="flex flex-col items-center justify-center gap-1 p-3 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                                            className="flex flex-col items-center justify-center gap-1 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                                         >
-                                            <Download size={20} className="text-gray-700 dark:text-white" />
-                                            <span className="text-xs font-bold text-gray-700 dark:text-white">{t['Download PDF']}</span>
+                                            <Download size={18} className="text-gray-700 dark:text-white" />
+                                            <span className="text-[10px] font-bold text-gray-700 dark:text-white">{t['Invoice']}</span>
                                         </button>
                                         <button
                                             onClick={handleSharePDF}
-                                            className="flex flex-col items-center justify-center gap-1 p-3 bg-gray-100 dark:bg-gray-700 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                                            className="flex flex-col items-center justify-center gap-1 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
                                         >
-                                            <Share2 size={20} className="text-gray-700 dark:text-white" />
-                                            <span className="text-xs font-bold text-gray-700 dark:text-white">{t['Share PDF']}</span>
+                                            <Share2 size={18} className="text-gray-700 dark:text-white" />
+                                            <span className="text-[10px] font-bold text-gray-700 dark:text-white">{t['Share']}</span>
                                         </button>
                                         <button
                                             onClick={handleSendBillOnWhatsApp}
                                             disabled={!latestBillId || sendingBillWhatsApp}
-                                            className="flex flex-col items-center justify-center gap-1 p-3 bg-emerald-100 dark:bg-emerald-900/40 rounded-xl hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors disabled:opacity-50"
+                                            className="flex flex-col items-center justify-center gap-1 p-3 bg-emerald-50 dark:bg-emerald-900/40 rounded-xl hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors disabled:opacity-50"
                                         >
-                                            <MessageCircle size={20} className="text-emerald-700 dark:text-emerald-300" />
-                                            <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                                                {sendingBillWhatsApp ? t['Sending...'] : t['Send WhatsApp']}
+                                            <MessageCircle size={18} className="text-emerald-700 dark:text-emerald-300" />
+                                            <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                                                {sendingBillWhatsApp ? '...' : 'WhatsApp'}
                                             </span>
                                         </button>
                                     </div>
 
-                                    <button
-                                        onClick={handleTransactionComplete}
-                                        className="mt-6 w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-black text-lg shadow-xl active:scale-95 transition-transform"
-                                    >
-                                        {t['OK, NEXT BILL']}
-                                    </button>
+                                    {(animationType !== 'ledger' || partialPaymentStep === 'SUCCESS' || partialPaymentStep === 'NONE') && (
+                                        <button
+                                            onClick={handleTransactionComplete}
+                                            className="mt-8 w-full bg-black dark:bg-white text-white dark:text-black py-4 rounded-2xl font-black text-lg shadow-xl active:scale-95 transition-transform"
+                                        >
+                                            {t['OK, NEXT BILL']}
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
                     </div>
                 )
             }
+            {showRiskConfirmation && (
+                <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-[2rem] p-8 max-w-sm w-full shadow-2xl animate-in zoom-in duration-200">
+                        <div className="w-16 h-16 bg-red-100 dark:bg-red-900/40 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <X className="text-red-600" size={32} />
+                        </div>
+                        <h3 className="text-xl font-black text-gray-900 dark:text-white mb-2">{t['High Risk Transaction']}</h3>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">
+                            {khataInfo?.riskMessage || t['This customer has exceeded their limit or has a poor score.']}
+                            <br /><br />
+                            {t['Are you sure you want to give Udhaar?']}
+                        </p>
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={() => {
+                                    setShowRiskConfirmation(false);
+                                    handleLedgePayment(true);
+                                }}
+                                className="w-full bg-red-600 text-white py-4 rounded-xl font-black shadow-lg shadow-red-200 active:scale-95 transition-all"
+                            >
+                                {t['Yes, Proceed Anyways']}
+                            </button>
+                            <button
+                                onClick={() => setShowRiskConfirmation(false)}
+                                className="w-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-4 rounded-xl font-black active:scale-95 transition-all"
+                            >
+                                {t['No, Go Back']}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 };

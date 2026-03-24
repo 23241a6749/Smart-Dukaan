@@ -10,6 +10,8 @@ export interface KhataExplanation {
     limit: number;
     availableCredit: number;
     reasons: string[];
+    riskLevel: 'LOW' | 'SOFT' | 'STRONG';
+    riskMessage?: string;
     components: {
         pts: number;
         cs: number;
@@ -133,6 +135,7 @@ export const getKhataStatus = async (customerPhone: string, globalScore?: number
     // Use global score if provided, otherwise fallback to local
     const score = globalScore !== undefined ? globalScore : (customer?.khataScore || SCORE_DEFAULT);
     const limit = globalLimit !== undefined ? globalLimit : (customer?.khataLimit || 0);
+    const balance = customer?.activeKhataAmount || 0;
 
     // Add logic-based reasons
     if (score < 500) {
@@ -151,11 +154,31 @@ export const getKhataStatus = async (customerPhone: string, globalScore?: number
         }
     }
 
+    // Risk Assessment
+    let riskLevel: 'LOW' | 'SOFT' | 'STRONG' = 'LOW';
+    let riskMessage = "";
+
+    const usageRatio = limit > 0 ? (balance / limit) : (balance > 0 ? 2 : 0);
+
+    if (score < 450 || usageRatio > 1.5) {
+        riskLevel = 'STRONG';
+        riskMessage = score < 450
+            ? "High risk: Poor repayment history and low credit trust."
+            : "High risk: Limit exceeded significantly.";
+    } else if (score < 600 || usageRatio >= 0.9) {
+        riskLevel = 'SOFT';
+        riskMessage = score < 600
+            ? "Caution: Moderate repayment history."
+            : "Customer is close to or has exceeded their limit.";
+    }
+
     return {
         score,
         limit,
-        availableCredit: Math.max(0, limit - (customer?.activeKhataAmount || 0)),
+        availableCredit: Math.max(0, limit - balance),
         reasons,
+        riskLevel,
+        riskMessage,
         components: {
             pts: 0,
             cs: 0,
