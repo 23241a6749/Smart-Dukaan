@@ -44,8 +44,8 @@ router.post('/process', auth, async (req, res) => {
         return res.status(400).json({ message: 'Invalid line items' });
     }
 
-        const results: any[] = [];
-        const resolvedProductIds = new Map<string, string>();
+    const results: any[] = [];
+    const resolvedProductIds = new Map<string, string>();
     const billItems: any[] = [];
     let billTotal = 0;
 
@@ -107,8 +107,8 @@ router.post('/process', auth, async (req, res) => {
                     costPrice: costPrice,
                     stock: quantity,
                     unit: item.unit || 'unit',
-                    category: 'Uncategorized', // Default
-                    icon: '📦'
+                    ...(await classifyProduct(productName)),
+
                 });
 
                 await newProduct.save();

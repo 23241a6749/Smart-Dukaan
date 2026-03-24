@@ -10,6 +10,7 @@ export interface GSTClassification {
     hsnCode: string;
     gstRate: number;
     category: string;
+    icon: string;
 }
 
 // ── Normalize a product name for DB lookup ────────────────────────────────────
@@ -34,6 +35,7 @@ export async function classifyProduct(productName: string): Promise<GSTClassific
             hsnCode: existing.hsnCode,
             gstRate: existing.gstRate,
             category: existing.category,
+            icon: existing.icon || '📦',
         };
     }
 
@@ -50,6 +52,7 @@ export async function classifyProduct(productName: string): Promise<GSTClassific
                 hsnCode: partialMatch.hsnCode,
                 gstRate: partialMatch.gstRate,
                 category: partialMatch.category,
+                icon: partialMatch.icon || '📦',
             };
         }
     }
@@ -64,6 +67,7 @@ export async function classifyProduct(productName: string): Promise<GSTClassific
             hsnCode: result.hsnCode,
             gstRate: result.gstRate,
             category: result.category,
+            icon: result.icon,
         });
     } catch (e: any) {
         // Duplicate key is fine — another request may have already inserted it
@@ -85,7 +89,8 @@ Return ONLY a valid JSON object with exactly these fields (no markdown, no extra
   "normalizedName": "<lowercase, simplified name without brand/size e.g. 'basmati rice'>",
   "hsnCode": "<4-digit HSN code>",
   "gstRate": <GST percentage as number: 0, 5, 12, 18, or 28>,
-  "category": "<product category e.g. 'Food & Beverages', 'Spices', 'Dairy', 'Cleaning', etc.>"
+  "category": "<product category e.g. 'Food & Beverages', 'Spices', 'Dairy', 'Cleaning', etc.>",
+  "emoji": "<exactly one relevant emoji for this product>"
 }
 
 Indian GST rules for common Smart Dukaan items:
@@ -121,6 +126,7 @@ Indian GST rules for common Smart Dukaan items:
             hsnCode: String(parsed.hsnCode || '0000'),
             gstRate,
             category: parsed.category || 'General',
+            icon: parsed.emoji || '📦',
         };
     } catch (err: any) {
         console.error('[GST] OpenAI classification failed, using defaults. Raw:', raw, 'Error:', err.message);
@@ -131,6 +137,7 @@ Indian GST rules for common Smart Dukaan items:
             hsnCode: '0000',
             gstRate: 5,
             category: 'General',
+            icon: '📦',
         };
     }
 }

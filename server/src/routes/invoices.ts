@@ -250,12 +250,17 @@ invoiceRouter.get('/recovery-state/:invoiceId', auth, async (req: Request, res: 
         const sinceRaw = String(req.query?.since || '');
         const sinceDate = sinceRaw ? new Date(sinceRaw) : null;
         const hasValidSince = Boolean(sinceDate && !Number.isNaN(sinceDate.getTime()));
+        const sinceTime = (hasValidSince && sinceDate) ? sinceDate.getTime() : 0;
 
-        const latestVoiceHistory = [...invoice.reminder_history]
+        const recentReminderHistory = hasValidSince && sinceTime > 0
+            ? invoice.reminder_history.filter((entry) => new Date(entry.timestamp).getTime() >= sinceTime)
+            : invoice.reminder_history;
+
+        const latestVoiceHistory = [...recentReminderHistory]
             .reverse()
             .find((entry) => entry.channel === 'voice_call');
 
-        const latestTranscriptHistory = [...invoice.reminder_history]
+        const latestTranscriptHistory = [...recentReminderHistory]
             .reverse()
             .find((entry) => entry.channel === 'voice_call' && entry.message_content?.includes('[Deepgram]:'));
 
@@ -272,9 +277,10 @@ invoiceRouter.get('/recovery-state/:invoiceId', auth, async (req: Request, res: 
             : null;
         
         const activeSession = latestSession || fallbackSession;
-        const latestSessionCustomerTurn = activeSession?.transcriptTurns
-            ? [...activeSession.transcriptTurns].reverse().find((turn: any) => turn.speaker === 'customer')
-            : null;
+        const allSessionTranscriptTurns = activeSession?.transcriptTurns || [];
+        const latestSessionCustomerTurn = [...allSessionTranscriptTurns]
+            .reverse()
+            .find((turn: any) => turn.speaker === 'customer');
 
         const hasTranscript = Boolean(latestTranscriptHistory);
         const hasTranscriptSince = hasValidSince
@@ -306,6 +312,11 @@ invoiceRouter.get('/recovery-state/:invoiceId', auth, async (req: Request, res: 
             negotiationRemainingAmount: activeSession?.remainingAmount || null,
             negotiationPromisedDate: activeSession?.promisedDate || null,
             latestSessionCustomerTranscript: latestSessionCustomerTurn?.text || null,
+            transcriptTurns: allSessionTranscriptTurns.map((turn: any) => ({
+                speaker: turn.speaker,
+                text: turn.text,
+                timestamp: turn.timestamp
+            })),
             negotiationLanguage: activeSession?.detectedLanguage || customer?.preferredVoiceLanguage || customer?.preferredLanguage || 'en',
             negotiationLanguageConfidence: activeSession?.languageConfidence || 0,
             negotiationCodeMixed: activeSession?.isCodeMixed || false,

@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'http',
-    hostname: '192.168.0.100'
+    hostname: '10.10.10.254'
   },
   plugins: {
     SplashScreen: {

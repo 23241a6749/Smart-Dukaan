@@ -33,6 +33,7 @@ import { reportsRouter } from './routes/reports.js';
 import { expiryRouter } from './routes/expiry.js';
 import { wasteRouter } from './routes/waste.js';
 import { discountRouter } from './routes/discounts.js';
+import { ocrRouter } from './routes/ocr.js';
 import { startExpiryScheduler } from './jobs/expiryScheduler.js';
 
 
@@ -83,6 +84,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/expiry', expiryRouter);
 app.use('/api/waste', wasteRouter);
 app.use('/api/discounts', discountRouter);
+app.use('/api/ocr', ocrRouter);
 
 io.on('connection', (socket) => {
     console.log('User connected to socket:', socket.id);
