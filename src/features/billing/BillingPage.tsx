@@ -971,22 +971,22 @@ export const BillingPage: React.FC = () => {
 
     const activeCategory = categories[selectedCategoryIndex] || 'All';
 
-    const gradients: any = {
+    const gradients: Record<string, string> = {
         'All': 'linear-gradient(135deg, #facc15, #fb923c)',
-        'Grocery': 'linear-gradient(135deg, #22c55e, #4ade80)',
-        'Dairy': 'linear-gradient(135deg, #60a5fa, #93c5fd)',
-        'Bakery': 'linear-gradient(135deg, #f59e0b, #fbbf24)',
-        'Beverages': 'linear-gradient(135deg, #06b6d4, #67e8f9)',
-        'Food & Beverages': 'linear-gradient(135deg, #06b6d4, #67e8f9)',
-        'Snacks': 'linear-gradient(135deg, #f43f5e, #fb7185)',
-        'Fruits & Vegetables': 'linear-gradient(135deg, #16a34a, #86efac)',
-        'Meat & Seafood': 'linear-gradient(135deg, #dc2626, #f87171)',
-        'Frozen Foods': 'linear-gradient(135deg, #0ea5e9, #bae6fd)',
-        'Personal Care': 'linear-gradient(135deg, #a78bfa, #e9d5ff)',
-        'Household': 'linear-gradient(135deg, #64748b, #cbd5f5)',
-        'Stationery': 'linear-gradient(135deg, #f97316, #fdba74)',
-        'Electronics': 'linear-gradient(135deg, #1e293b, #475569)',
-        'Other': 'linear-gradient(135deg, #9ca3af, #e5e7eb)'
+        'Grocery': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Dairy': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Bakery': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Beverages': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Food & Beverages': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Snacks': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Fruits & Vegetables': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Meat & Seafood': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Frozen Foods': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Personal Care': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Household': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Stationery': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Electronics': 'linear-gradient(135deg, #facc15, #fb923c)',
+        'Other': 'linear-gradient(135deg, #facc15, #fb923c)'
     };
 
     return (
