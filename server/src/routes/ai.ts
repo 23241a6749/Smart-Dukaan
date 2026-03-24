@@ -148,4 +148,56 @@ router.post('/batch-translate', auth, async (req, res) => {
     }
 });
 
+router.post('/parse-voice-command', auth, async (req, res) => {
+    try {
+        const { command } = req.body;
+
+        if (!command) {
+            return res.status(400).json({ message: 'Command is required' });
+        }
+
+        if (!openai) {
+            return res.status(503).json({ message: 'AI Parsing service not available' });
+        }
+
+        const response = await openai.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [
+                {
+                    role: "system",
+                    content: `You are an intelligent voice assistant for a Kirana/MSME shop billing application. 
+                    The user will provide a voice command (potentially in English, Hindi, Tamil, or mixed Hinglish) to add items to their cart.
+                    Extract the product names, quantities, and units.
+                    
+                    CONSTRAINTS:
+                    - Normalize product names to simple English (e.g., "cheeni" -> "sugar", "doodh" -> "milk").
+                    - If no quantity is mentioned, assume 1.
+                    - If a unit is mentioned (kg, l, packet, piece), include it.
+                    - Return ONLY a JSON array of objects.
+                    - Example Output: [{"product": "sugar", "quantity": 2, "unit": "kg"}, {"product": "milk", "quantity": 3, "unit": "liter"}]`
+                },
+                {
+                    role: "user",
+                    content: command
+                }
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0,
+        });
+
+        const content = response.choices[0].message.content;
+        if (content) {
+            const result = JSON.parse(content);
+            // The AI might return an object like { "items": [...] } or just the array if handled correctly.
+            // But with json_object format, we expect a wrapper or we should specify the key.
+            res.json({ items: result.items || result.products || Object.values(result)[0] || [] });
+        } else {
+            res.json({ items: [] });
+        }
+    } catch (err: any) {
+        console.error('AI Parsing error:', err.message);
+        res.status(500).json({ message: 'AI Parsing failed' });
+    }
+});
+
 export { router as aiRouter };

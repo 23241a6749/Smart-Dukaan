@@ -20,6 +20,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
   const [transcript, setTranscript] = useState('');
   const [isSupported, setIsSupported] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const fullTranscriptRef = useRef('');
 
   const onResultRef = useRef(options.onResult);
   const onErrorRef = useRef(options.onError);
@@ -36,36 +37,49 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
       setTimeout(() => setIsSupported(true), 0);
       recognitionRef.current = new SpeechRecognition();
 
-      recognitionRef.current.continuous = false;
+      recognitionRef.current.continuous = false; // Stay with user preference
       recognitionRef.current.interimResults = true;
-      recognitionRef.current.lang = 'en-US';
+      recognitionRef.current.lang = 'en-IN'; // Better for India
 
       recognitionRef.current.onstart = () => {
         setIsListening(true);
         setTranscript('');
+        fullTranscriptRef.current = '';
       };
 
       recognitionRef.current.onresult = (event: any) => {
         let interimTranscript = '';
+        let finalSegment = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const resultTranscript = event.results[i][0].transcript;
-
           if (event.results[i].isFinal) {
-            setTranscript(prev => prev + resultTranscript);
-            onResultRef.current?.(resultTranscript);
+            finalSegment += resultTranscript;
           } else {
             interimTranscript += resultTranscript;
           }
         }
+
+        if (finalSegment) {
+          fullTranscriptRef.current += (fullTranscriptRef.current ? ' ' : '') + finalSegment;
+        }
+
+        setTranscript((fullTranscriptRef.current + ' ' + interimTranscript).trim());
       };
 
       recognitionRef.current.onerror = (event: any) => {
+        console.error('Speech recognition error:', event.error);
         onErrorRef.current?.(event.error);
+        setIsListening(false);
       };
 
       recognitionRef.current.onend = () => {
         setIsListening(false);
+        // ONLY call onResult when the session truly ends to get the full timing right
+        const finalOutput = fullTranscriptRef.current.trim();
+        if (finalOutput) {
+          onResultRef.current?.(finalOutput);
+        }
       };
     }
 
@@ -74,12 +88,12 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
         recognitionRef.current.abort();
       }
     };
-  }, []); // Only run once on mount
+  }, []);
 
   // Update language dynamically
   useEffect(() => {
     if (recognitionRef.current && options.lang) {
-      let speechLang = 'en-US';
+      let speechLang = 'en-IN';
       if (options.lang === 'hi') speechLang = 'hi-IN';
       if (options.lang === 'te') speechLang = 'te-IN';
       recognitionRef.current.lang = speechLang;
@@ -89,7 +103,14 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
   const startListening = () => {
     if (isSupported && recognitionRef.current) {
       setTranscript('');
-      recognitionRef.current.start();
+      fullTranscriptRef.current = '';
+      try {
+        recognitionRef.current.start();
+      } catch (err) {
+        console.error("Failed to start speech recognition:", err);
+        recognitionRef.current.stop();
+        setTimeout(() => recognitionRef.current.start(), 100);
+      }
     }
   };
 
@@ -101,6 +122,7 @@ export const useSpeechRecognition = (options: UseSpeechRecognitionOptions = {}) 
 
   const resetTranscript = () => {
     setTranscript('');
+    fullTranscriptRef.current = '';
   };
 
   return {

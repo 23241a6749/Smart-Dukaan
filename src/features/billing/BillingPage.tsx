@@ -9,13 +9,14 @@ import type { Customer } from '../../services/api';
 import { db } from '../../db/db';
 import type { Customer as LocalCustomer } from '../../db/db';
 import { recalculateKhataScore, SCORE_DEFAULT, calculateKhataLimit, getKhataStatus, type KhataExplanation } from '../../lib/khataLogic';
-import { Search, User, Phone, X, ChevronRight, Minus, Plus, Trash2, Award, Download, Share2, MessageCircle, Mic, MapPin } from 'lucide-react';
+import { Search, User, Phone, X, ChevronRight, Minus, Plus, Trash2, Award, Download, Share2, MessageCircle, Mic, MapPin, Loader2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useTranslate } from '../../hooks/useTranslate';
 import { useProductUsage } from '../../hooks/useProductUsage';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import PullToRefreshIndicator from '../../components/PullToRefreshIndicator';
+import { aiApi } from '../../services/api';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5001';
 
@@ -165,52 +166,101 @@ export const BillingPage: React.FC = () => {
     const translatedProducts = useTranslate(products, ['name', 'category']);
     const translatedCart = useTranslate(cart, ['name', 'unit']);
 
-    const handleVoiceCommand = React.useCallback((transcript: string) => {
-        const text = transcript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
-        addToast(`Heard: "${text}"`, 'info');
+    const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+    const [hasStartedVoice, setHasStartedVoice] = useState(false);
 
-        const addKeywords = ['add', 'jodo', 'plus', 'add-karo', 'లగించండి', 'జోడించండి', 'యాడ్', 'చేర్చు'];
-        const removeKeywords = ['remove', 'hatao', 'minus', 'delete', 'తీసేయి', 'తొలగించు'];
+    const handleVoiceCommand = React.useCallback(async (transcript: string) => {
+        if (!transcript.trim()) return;
 
-        const isAdd = addKeywords.some(k => text.includes(k));
-        const isRemove = removeKeywords.some(k => text.includes(k));
+        setIsProcessingVoice(true);
+        addToast(t['Processing voice...'] || 'Processing voice...', 'info');
 
-        if (!isAdd && !isRemove) {
-            setSearchTerm(transcript);
-            return;
-        }
+        try {
+            const response = await aiApi.parseVoiceCommand(transcript);
+            let items = response.data.items;
 
-        const match = translatedProducts?.find((p: any) => {
-            const name = p.name.toLowerCase();
-            const cleanedText = text.replace('add', '').replace('remove', '').replace('jodo', '').replace('hatao', '').trim();
-            return text.includes(name) || (cleanedText.length > 2 && name.includes(cleanedText));
-        });
-
-        if (match) {
-            const originalProduct = products.find((p: any) => p._id === match._id);
-            if (!originalProduct) return;
-
-            if (isAdd) {
-                const success = addToCart(originalProduct, originalProduct.stock);
-                if (success) {
-                    addToast(`+ ${match.name}`, 'success');
-                }
-            } else if (isRemove) {
-                const inCart = cart.find(i => i._id === match._id);
-                if (inCart) {
-                    decreaseQuantity(match._id!);
-                    addToast(`- ${match.name}`, 'info');
+            // Handle different JSON structures returned by different AI response variations
+            if (!Array.isArray(items)) {
+                if (typeof items === 'object' && items !== null) {
+                    items = Object.values(items).find(v => Array.isArray(v)) as any[] || [];
+                } else {
+                    items = [];
                 }
             }
-        } else {
-            const cleanedText = text.replace('add', '').replace('remove', '').replace('jodo', '').replace('hatao', '').trim();
-            addToast(`Not Found: "${cleanedText}"`, 'warning');
+
+            if (items.length === 0) {
+                addToast(t['AI couldn\'t understand clearly'] || 'AI couldn\'t understand clearly', 'warning');
+                setSearchTerm(transcript);
+                return;
+            }
+
+            let addedCount = 0;
+            for (const aiItem of items) {
+                // Find best match in the currently visible/loaded products
+                const match = products.find((p: any) => {
+                    const searchName = aiItem.product.toLowerCase();
+                    const prodName = p.name.toLowerCase();
+                    return prodName.includes(searchName) || searchName.includes(prodName);
+                });
+
+                if (match) {
+                    const quantityToAdd = Number(aiItem.quantity) || 1;
+                    const existingItem = cart.find(i => i._id === match._id);
+                    const currentCartQty = existingItem?.quantity || 0;
+                    const targetQty = currentCartQty + quantityToAdd;
+                    const availableStock = match.stock;
+
+                    if (targetQty > availableStock) {
+                        if (availableStock > currentCartQty) {
+                            updateQuantity(match._id, availableStock, availableStock);
+                            addToast(`Only ${availableStock} units of ${match.name} available. Added max possible.`, 'warning');
+                            addedCount++;
+                        } else {
+                            addToast(`${match.name} is already at max stock in your cart.`, 'warning');
+                        }
+                    } else {
+                        if (!existingItem) {
+                            addToCart(match, availableStock);
+                            if (targetQty > 1) {
+                                // Add one, then update to the target quantity
+                                // We use a small timeout to ensure CartContext state update completes for the first item
+                                setTimeout(() => updateQuantity(match._id, targetQty, availableStock), 50);
+                            }
+                        } else {
+                            updateQuantity(match._id, targetQty, availableStock);
+                        }
+                        addedCount++;
+                    }
+                    recordUsage(match._id);
+                }
+            }
+
+            if (addedCount > 0) {
+                addToast(`AI: Successfully added ${addedCount} order items 🏪`, 'success');
+            } else {
+                addToast(t['No matching products found'] || 'No matching products found', 'warning');
+                setSearchTerm(transcript);
+            }
+        } catch (err) {
+            console.error('Voice AI parsing failed:', err);
+            addToast(t['Voice parsing failed'] || 'Voice parsing failed', 'error');
             setSearchTerm(transcript);
+        } finally {
+            setIsProcessingVoice(false);
         }
-    }, [translatedProducts, products, addToCart, decreaseQuantity, cart, addToast]);
+    }, [products, addToCart, updateQuantity, cart, addToast, t, recordUsage]);
 
     const { isListening, startListening, stopListening, isSupported } = useSpeechRecognition({
         onResult: handleVoiceCommand,
+        onError: (err) => {
+            if (err === 'network') {
+                addToast(t['Network error: Please check your internet for voice input.'] || 'Network error: Please check your internet for voice input.', 'error');
+            } else if (err === 'not-allowed') {
+                addToast(t['Microphone permission denied.'] || 'Microphone permission denied.', 'error');
+            } else {
+                console.error('Speech recognition error:', err);
+            }
+        },
         lang: language
     });
 
@@ -939,48 +989,77 @@ export const BillingPage: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col relative bg-gray-50 dark:bg-gray-900 min-h-full">
+        <div className="flex flex-col relative bg-white dark:bg-gray-900 min-h-full overflow-x-hidden">
             <PullToRefreshIndicator {...pullState} />
-            {/* Integrated Billing Bar (Scrolls with context) */}
+
+            {/* Redesigned Unified Header & Search Section */}
             <div
-                className="p-4 space-y-3 transition-all duration-300"
+                className="relative pt-4 pb-12 transition-colors duration-500"
                 style={{ background: gradients[activeCategory] || gradients['All'] }}
             >
-                <div className="flex items-center justify-between">
+                {/* Shop Metadata & User */}
+                <div className="px-4 flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5 text-[10px] text-black font-black uppercase tracking-wider">
                         <MapPin size={14} className="text-black animate-pulse" />
                         <span>Smart Kirana • Main Bazaar 🏪</span>
                     </div>
-                    <div className="w-8 h-8 rounded-full bg-white/25 backdrop-blur-md flex items-center justify-center border border-white/40 text-black">
+                    <div className="w-8 h-8 rounded-full bg-white/30 backdrop-blur-md flex items-center justify-center border border-white/40 text-black shadow-sm">
                         <User size={16} />
                     </div>
                 </div>
-                <h2 className="text-xl font-black text-black">{t.tapToAdd}</h2>
 
-                <div className="flex gap-2">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                {/* Main Action Text */}
+                <div className="px-4 mb-4">
+                    <h2 className="text-2xl font-black text-black leading-tight">{t.tapToAdd}</h2>
+                </div>
+
+                {/* Integrated Search Bar */}
+                <div className="px-4 mb-6">
+                    <div className="relative group">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-green transition-colors" size={20} />
                         <input
                             type="text"
                             placeholder={t['Search products...'] || 'Search products...'}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full border-none bg-white text-gray-900 rounded-xl p-2.5 pl-10 placeholder-gray-400 shadow-md focus:ring-1 focus:ring-primary-green outline-none transition-all font-medium text-sm"
+                            className="w-full border-none bg-white text-gray-900 rounded-2xl p-4 pl-12 placeholder-gray-400 shadow-xl shadow-black/5 focus:ring-2 focus:ring-primary-green outline-none transition-all font-bold text-base"
                         />
                         {isSupported && (
-                            <button
-                                onClick={isListening ? stopListening : startListening}
-                                className={`absolute right-2 top-2 w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-gray-400 hover:text-primary-green'}`}
-                            >
-                                <Mic size={16} className={isListening ? 'animate-bounce' : ''} />
-                            </button>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                                {!searchTerm && !isListening && !isProcessingVoice && !hasStartedVoice && (
+                                    <div className="absolute -top-12 -right-1 bg-gray-800 text-white text-xs font-black px-4 py-2 rounded-2xl animate-bounce whitespace-nowrap shadow-[0_12px_30px_-8px_rgba(0,0,0,0.5)] border-2 border-white/5 flex flex-col items-center">
+                                        <div className="leading-none tracking-tight">
+                                            Try "Add Sugar"
+                                        </div>
+                                        <div className="w-3 h-3 bg-gray-800 rotate-45 absolute -bottom-1.5 right-4 border-r-2 border-b-2 border-white/5"></div>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => {
+                                        if (isListening) {
+                                            stopListening();
+                                        } else {
+                                            setHasStartedVoice(true);
+                                            startListening();
+                                        }
+                                    }}
+                                    disabled={isProcessingVoice}
+                                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-50/50 backdrop-blur-md text-gray-400 hover:text-primary-green'} ${isProcessingVoice ? 'opacity-50 grayscale' : ''}`}
+                                >
+                                    {isProcessingVoice ? (
+                                        <Loader2 size={18} className="animate-spin text-primary-green" />
+                                    ) : (
+                                        <Mic size={18} className={isListening ? 'animate-bounce' : ''} />
+                                    )}
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
 
-                {/* Category Pills */}
+                {/* Category Pills (Scrolled within header flow) */}
                 {categories.length > 1 && (
-                    <div className="flex gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] pt-1 pb-1">
+                    <div className="flex gap-2 overflow-x-auto px-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                         {categories.map((cat, index) => {
                             const icons: any = {
                                 'All': '🛍️',
@@ -998,29 +1077,30 @@ export const BillingPage: React.FC = () => {
                                 'Electronics': '🔌',
                                 'Other': '📦'
                             };
+                            const isActive = selectedCategoryIndex === index;
                             return (
                                 <button
                                     key={cat}
                                     onClick={() => setSelectedCategoryIndex(index)}
-                                    className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all duration-200 transform scale-100 active:scale-95 flex items-center gap-1.5 ${selectedCategoryIndex === index
-                                        ? 'text-white shadow-lg scale-105'
-                                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-100 dark:border-gray-700 hover:border-gray-200 hover:-translate-y-0.5'
+                                    className={`flex-shrink-0 px-5 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all duration-300 transform active:scale-90 flex items-center gap-2 border ${isActive
+                                        ? 'bg-black text-white border-black shadow-xl -translate-y-1'
+                                        : 'bg-white/80 backdrop-blur-md text-gray-800 border-white/50 hover:bg-white shadow-sm'
                                         }`}
-                                    style={{
-                                        background: selectedCategoryIndex === index ? (gradients[cat] || gradients['All']) : undefined,
-                                        boxShadow: selectedCategoryIndex === index ? '0 10px 15px -3px rgba(0, 0, 0, 0.1)' : undefined
-                                    }}
                                 >
-                                    <span>{icons[cat] || '📦'}</span> {cat === 'All' ? (t['All'] || 'All') : cat}
+                                    <span className={isActive ? 'scale-125' : ''}>{icons[cat] || '📦'}</span>
+                                    {cat === 'All' ? (t['All'] || 'All') : cat}
                                 </button>
                             );
                         })}
                     </div>
                 )}
+
+                {/* The Transition Gradient: Fades the theme color into white */}
+                <div className="absolute left-0 right-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-white dark:to-gray-900 pointer-events-none" />
             </div>
 
-            {/* Product Grid */}
-            <div className="p-4 pb-48">
+            {/* Product Section: Integrated and overlapping the fade slightly for depth */}
+            <div className="px-4 pb-48 -mt-8 relative z-10">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                     {sortedProducts.map((product, index) => (
                         <div
@@ -1040,8 +1120,9 @@ export const BillingPage: React.FC = () => {
                         </div>
                     ))}
                     {sortedProducts.length === 0 && (
-                        <div className="col-span-2 lg:col-span-3 text-center py-20 text-gray-400">
-                            <p className="font-bold">No products found</p>
+                        <div className="col-span-full text-center py-20 bg-white/50 backdrop-blur-sm rounded-3xl border-2 border-dashed border-gray-100 dark:border-gray-800">
+                            <Trash2 size={40} className="mx-auto mb-3 text-gray-300" />
+                            <p className="font-black text-gray-400 uppercase tracking-widest text-sm">{t['No products found'] || 'No products found'}</p>
                         </div>
                     )}
                 </div>
@@ -1757,22 +1838,6 @@ export const BillingPage: React.FC = () => {
                     </div>
                 )
             }
-            {isSupported && (
-                <div className="fixed bottom-48 right-4 z-50 flex flex-col items-end gap-2">
-                    <div className="bg-gray-900 dark:bg-gray-800 text-white text-[10px] font-black px-2.5 py-1.5 rounded-xl shadow-2xl animate-bounce border border-gray-700/50">
-                        Try: "Add Sugar" 🎙️
-                    </div>
-                    <button
-                        onClick={isListening ? stopListening : startListening}
-                        className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 relative ${isListening ? 'bg-red-500 text-white animate-pulse shadow-red-500/50' : 'bg-gradient-to-br from-primary-green to-emerald-600 text-white hover:scale-105 active:scale-95 shadow-primary-green/30'}`}
-                    >
-                        {isListening && (
-                            <div className="absolute inset-0 rounded-full bg-red-500/30 animate-ping"></div>
-                        )}
-                        <Mic size={24} />
-                    </button>
-                </div>
-            )}
 
             {showRiskConfirmation && (
                 <div className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">

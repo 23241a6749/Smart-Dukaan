@@ -488,5 +488,11 @@ export const discountApi = {
 };
 
 
+export const aiApi = {
+    translate: (text: string, targetLanguage: string) => api.post('/ai/translate', { text, targetLanguage }),
+    batchTranslate: (texts: string[], targetLanguage: string) => api.post('/ai/batch-translate', { texts, targetLanguage }),
+    parseVoiceCommand: (command: string) => api.post<{ items: Array<{ product: string; quantity: number; unit?: string }> }>('/ai/parse-voice-command', { command }),
+};
+
 export default api;
 
