@@ -12,7 +12,14 @@ export interface RecoveryCustomer {
     risk?: 'LOW' | 'MEDIUM' | 'HIGH';
     nextCallDate?: number;
     recoveryStatus?: string;
+    preferredVoiceLanguage?: string;
 }
+
+const languageLabels: Record<string, { label: string; flag: string }> = {
+    hi: { label: 'हिंदी', flag: '🔊' },
+    te: { label: 'తెలుగు', flag: '🔊' },
+    en: { label: 'English', flag: '🔊' },
+};
 
 const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: RecoveryCustomer | null, isOpen: boolean, onClose: () => void, onResult: (res: any) => void }) => {
     const [status, setStatus] = useState<'connecting' | 'active' | 'completed' | 'failed'>('connecting');
@@ -22,9 +29,13 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
     const [_lastUpdate, setLastUpdate] = useState<string>('');
     const [activeInvoiceId, setActiveInvoiceId] = useState<string>('');
     const [sessionStartedAtIso, setSessionStartedAtIso] = useState<string>('');
+    const [lastTranscriptCount, setLastTranscriptCount] = useState<number>(0);
     const timerRef = useRef<number | null>(null);
     const hasTriggeredCallRef = useRef(false);
     const onResultRef = useRef(onResult);
+
+    const customerLanguage = customer?.preferredVoiceLanguage || 'en';
+    const langInfo = languageLabels[customerLanguage] || languageLabels['en'];
 
     useEffect(() => {
         onResultRef.current = onResult;
@@ -45,6 +56,7 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
             setCallDuration(0);
             setActiveInvoiceId('');
             setSessionStartedAtIso('');
+            setLastTranscriptCount(0);
             hasTriggeredCallRef.current = false;
             
             timerRef.current = window.setInterval(() => {
@@ -179,31 +191,25 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
                     setInsight(`Stage: ${state.negotiationStage} | Turns: ${state.negotiationTurns || 0}${partialText}${remainingText}${langText}`);
                 }
 
-                // Add AI prompt (what the system said)
-                if (state.latestVoiceLog && !state.latestVoiceLog.includes('We could not hear')) {
-                    setTranscript((prev) => {
-                        const exists = prev.some((entry) => entry.text === state.latestVoiceLog);
-                        if (exists) return prev;
-                        return [...prev, { role: 'assistant', text: state.latestVoiceLog || '' }];
-                    });
-                }
-
-                // Add customer transcript
-                if (state.latestTranscriptLog) {
-                    setTranscript((prev) => {
-                        const exists = prev.some((entry) => entry.text === state.latestTranscriptLog);
-                        if (exists) return prev;
-                        return [...prev, { role: 'user', text: state.latestTranscriptLog || '' }];
-                    });
-                }
-
-                // Also add session customer transcript if available
-                if (state.latestSessionCustomerTranscript) {
-                    setTranscript((prev) => {
-                        const exists = prev.some((entry) => entry.text === state.latestSessionCustomerTranscript);
-                        if (exists) return prev;
-                        return [...prev, { role: 'user', text: state.latestSessionCustomerTranscript || '' }];
-                    });
+                // Use all transcript turns from the session (real-time)
+                if (state.transcriptTurns && Array.isArray(state.transcriptTurns)) {
+                    const currentCount = state.transcriptTurns.length;
+                    if (currentCount !== lastTranscriptCount) {
+                        setLastTranscriptCount(currentCount);
+                        setTranscript([]);
+                        
+                        state.transcriptTurns.forEach((turn: { speaker: string; text: string }) => {
+                            if (turn.text && turn.text.trim()) {
+                                const role = turn.speaker === 'customer' ? 'user' : 
+                                            turn.speaker === 'agent' ? 'assistant' : 'system';
+                                setTranscript((prev) => {
+                                    const exists = prev.some((entry) => entry.text === turn.text);
+                                    if (exists) return prev;
+                                    return [...prev, { role, text: turn.text }];
+                                });
+                            }
+                        });
+                    }
                 }
 
                 if (state.negotiationStatus === 'completed') {
@@ -219,10 +225,10 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
             } catch {
                 // Polling...
             }
-        }, 3500);
+        }, 2500);
 
         return () => window.clearInterval(interval);
-    }, [isOpen, activeInvoiceId, sessionStartedAtIso, status]);
+    }, [isOpen, activeInvoiceId, sessionStartedAtIso, status, lastTranscriptCount]);
 
     if (!isOpen || !customer) return null;
 
@@ -251,28 +257,48 @@ const LiveCallModal = ({ customer, isOpen, onClose, onResult }: { customer: Reco
                 >
                     <div className="p-6 text-center border-b border-white/10">
                         <div className="relative">
-                            <div className="w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-4 bg-white/10 border border-white/20">
+                            <div className="w-24 h-24 rounded-full mx-auto flex items-center justify-center mb-4 bg-white/10 border border-white/20 relative overflow-hidden">
                                 <div className="text-white">
                                     {statusIcons[status]}
                                 </div>
                                 {status === 'active' && (
-                                    <div className="absolute inset-0 border-4 border-white/20 rounded-full animate-ping" />
+                                    <>
+                                        <div className="absolute inset-0 border-4 border-white/20 rounded-full animate-ping" />
+                                        <div className="absolute inset-0 flex items-center justify-center gap-0.5">
+                                            {[...Array(5)].map((_, i) => (
+                                                <span
+                                                    key={i}
+                                                    className="w-1 bg-emerald-400 rounded-full animate-pulse"
+                                                    style={{
+                                                        height: `${Math.random() * 24 + 8}px`,
+                                                        animationDelay: `${i * 100}ms`,
+                                                        animationDuration: '600ms'
+                                                    }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </>
                                 )}
                             </div>
                             {status === 'active' && (
-                                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-red-600 text-white px-2.5 py-0.5 rounded-full text-[10px] font-black flex items-center gap-1">
-                                    <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-red-600 text-white px-3 py-1 rounded-full text-[10px] font-black flex items-center gap-1 shadow-lg shadow-red-600/50">
+                                    <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
                                     LIVE
+                                </div>
+                            )}
+                            {status !== 'failed' && (
+                                <div className="absolute top-0 right-8 bg-gradient-to-r from-violet-600 to-purple-600 text-white px-3 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg shadow-purple-500/30 border border-white/20">
+                                    {langInfo.flag} {langInfo.label}
                                 </div>
                             )}
                         </div>
 
-                        <h2 className="text-xl font-black text-white tracking-tight">{customer.name}</h2>
+                        <h2 className="text-xl font-black text-white tracking-tight mt-2">{customer.name}</h2>
                         <p className="text-white/70 font-bold text-xs mt-1">Recovery Call · ₹{customer.amount.toLocaleString()}</p>
 
                         {status === 'active' && (
-                            <div className="mt-3 inline-flex items-center gap-2 bg-black/20 px-3 py-1 rounded-full">
-                                <Clock size={12} className="text-white/60" />
+                            <div className="mt-3 inline-flex items-center gap-2 bg-black/30 px-4 py-1.5 rounded-full border border-white/10">
+                                <Clock size={12} className="text-emerald-400" />
                                 <span className="text-white font-mono text-xs">{formatDuration(callDuration)}</span>
                             </div>
                         )}

@@ -133,6 +133,32 @@ export const supplierBillApi = {
     getHistory: () => api.get('/supplier-bills'),
 };
 
+export const ocrApi = {
+    scanBill: (data: { imageBase64?: string; imageUrl?: string }) =>
+        api.post<OcrResult>('/ocr/scan-bill', data),
+    scanBillAdvanced: (data: { imageBase64?: string; imageUrl?: string }) =>
+        api.post<OcrResult>('/ocr/scan-bill/advanced', data),
+};
+
+export interface OcrLineItem {
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    totalAmount: number;
+    unit?: string;
+}
+
+export interface OcrResult {
+    items: OcrLineItem[];
+    subtotal: number;
+    tax: number;
+    discount: number;
+    totalAmount: number;
+    invoiceNumber?: string;
+    billDate?: string;
+    storeName?: string;
+}
+
 export const invoiceApi = {
     getInvoices: () => api.get('/invoices'),
     getOverdueInvoices: () => api.get('/invoices/overdue'),
@@ -165,6 +191,7 @@ export interface RecoveryState {
     negotiationRemainingAmount: number | null;
     negotiationPromisedDate: string | null;
     latestSessionCustomerTranscript: string | null;
+    transcriptTurns: Array<{ speaker: string; text: string; timestamp?: string }>;
     negotiationLanguage: string;
     negotiationLanguageConfidence: number;
     negotiationCodeMixed: boolean;

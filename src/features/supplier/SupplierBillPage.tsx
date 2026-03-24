@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Check, Loader2, X, Scan, Save, Plus, History, FileText, Calendar, Package, CalendarDays } from 'lucide-react';
-import Tesseract from 'tesseract.js';
 import * as pdfjsLib from 'pdfjs-dist';
-import { supplierBillApi, productApi, expiryApi } from '../../services/api';
+import { supplierBillApi, productApi, expiryApi, ocrApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
 // PDF.js v5 worker setup - use bundled worker
@@ -145,33 +144,87 @@ export const SupplierBillPage: React.FC = () => {
         if (selectedFile.type.startsWith('image/')) {
             const url = URL.createObjectURL(selectedFile);
             setPreviewUrl(url);
-            processImage(url);
+            // Convert file to base64 and process
+            processImageFromFile(selectedFile);
         } else if (selectedFile.type === 'application/pdf') {
             setPreviewUrl(null);
             processPdf(selectedFile);
         }
     };
 
-    const processImage = async (url: string) => {
-        setIsProcessing(true);
-        setStatusText('Initializing OCR...');
-        setProgress(0);
-        try {
-            const result = await Tesseract.recognize(url, 'eng', {
-                logger: m => {
-                    if (m.status === 'recognizing text') {
-                        setProgress(Math.round(m.progress * 100));
-                        setStatusText(`Scanning... ${Math.round(m.progress * 100)}%`);
-                    } else {
-                        setStatusText(m.status);
+    // Compress image to reduce size for API
+    const compressImage = (file: File, maxWidth: number = 1024, quality: number = 0.8): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    // Resize if needed
+                    if (width > maxWidth) {
+                        height = (height * maxWidth) / width;
+                        width = maxWidth;
                     }
-                }
-            });
-            parseBillText(result.data.text);
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        // Compress to JPEG with quality
+                        const base64 = canvas.toDataURL('image/jpeg', quality);
+                        resolve(base64);
+                    } else {
+                        reject(new Error('Canvas context not available'));
+                    }
+                };
+                img.onerror = reject;
+                img.src = e.target?.result as string;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const processImageFromFile = async (file: File) => {
+        setIsProcessing(true);
+        setStatusText('Preparing image...');
+        setProgress(5);
+        
+        try {
+            // Compress image to reduce size (max 1024px width, 80% quality)
+            const base64 = await compressImage(file, 1024, 0.8);
+            setStatusText('Analyzing bill with AI...');
+            setProgress(20);
+            
+            const response = await ocrApi.scanBill({ imageBase64: base64 });
+            setProgress(90);
+            
+            if (response.data.items && response.data.items.length > 0) {
+                const items: LineItem[] = response.data.items.map((item, index) => ({
+                    id: `ocr-${index}-${Date.now()}`,
+                    productName: item.productName,
+                    quantity: item.quantity,
+                    unit: item.unit || 'pc',
+                    totalAmount: item.totalAmount,
+                    costPrice: item.unitPrice,
+                    sellingPrice: Math.round(item.unitPrice * 1.05)
+                }));
+                setLineItems(items);
+                setProgress(100);
+                setStatusText(`Found ${items.length} items!`);
+                addToast(`Successfully scanned ${items.length} items from bill`, 'success');
+            } else {
+                throw new Error('No items found in bill');
+            }
         } catch (err: any) {
             console.error('OCR Error:', err);
             setStatusText('OCR failed');
-            addToast(err?.message || 'Failed to scan image. Please try again.', 'error');
+            addToast(err?.response?.data?.message || err?.message || 'Failed to scan image. Please try again.', 'error');
         } finally {
             setIsProcessing(false);
         }
@@ -185,63 +238,48 @@ export const SupplierBillPage: React.FC = () => {
             const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
             const pdf = await loadingTask.promise;
             const page = await pdf.getPage(1);
-            const viewport = page.getViewport({ scale: 2 });
+            const viewport = page.getViewport({ scale: 1.5 }); // Reduced scale for smaller size
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             canvas.height = viewport.height;
             canvas.width = viewport.width;
             if (context) {
                 await page.render({ canvasContext: context, viewport, canvas }).promise;
-                const imageUrl = canvas.toDataURL('image/png');
-                setPreviewUrl(imageUrl);
-                await processImage(imageUrl);
+                // Compress directly from canvas
+                const base64 = canvas.toDataURL('image/jpeg', 0.7);
+                setPreviewUrl(base64);
+                
+                setStatusText('Analyzing bill with AI...');
+                setProgress(20);
+                
+                const response = await ocrApi.scanBill({ imageBase64: base64 });
+                setProgress(90);
+                
+                if (response.data.items && response.data.items.length > 0) {
+                    const items: LineItem[] = response.data.items.map((item, index) => ({
+                        id: `ocr-${index}-${Date.now()}`,
+                        productName: item.productName,
+                        quantity: item.quantity,
+                        unit: item.unit || 'pc',
+                        totalAmount: item.totalAmount,
+                        costPrice: item.unitPrice,
+                        sellingPrice: Math.round(item.unitPrice * 1.05)
+                    }));
+                    setLineItems(items);
+                    setProgress(100);
+                    setStatusText(`Found ${items.length} items!`);
+                    addToast(`Successfully scanned ${items.length} items from bill`, 'success');
+                } else {
+                    throw new Error('No items found in bill');
+                }
             }
         } catch (err: any) {
             console.error('PDF Error:', err);
             setStatusText('PDF processing failed');
-            addToast(err?.message || 'Failed to process PDF. Please try with an image instead.', 'error');
+            addToast(err?.response?.data?.message || err?.message || 'Failed to process PDF. Please try with an image instead.', 'error');
+        } finally {
             setIsProcessing(false);
         }
-    };
-
-    const parseBillText = (text: string) => {
-        const lines = text.split('\n');
-        const items: LineItem[] = [];
-        const qtyRegex = /(\d+(\.\d+)?)\s*(kg|g|gm|ltr|litre|ml|pc|pcs|pkt|packet)/i;
-
-        lines.forEach((line) => {
-            const cleanLine = line.trim();
-            if (cleanLine.length < 5) return;
-            if (/total|subtotal|gst|tax|amount/i.test(cleanLine) && cleanLine.length < 20) return;
-
-            const qtyMatch = cleanLine.match(qtyRegex);
-            const numbers = cleanLine.match(/(\d+(\.\d+)?)/g)?.map(Number) || [];
-
-            if (qtyMatch && numbers.length >= 2) {
-                const quantity = parseFloat(qtyMatch[1]);
-                const unit = qtyMatch[3];
-                const totalAmount = numbers[numbers.length - 1];
-                const namePart = cleanLine.substring(0, qtyMatch.index).trim();
-
-                if (namePart && totalAmount > 0) {
-                    const cost = totalAmount / quantity;
-                    items.push({
-                        id: Math.random().toString(36).substr(2, 9),
-                        productName: namePart,
-                        quantity,
-                        unit,
-                        totalAmount,
-                        costPrice: Math.round(cost),
-                        sellingPrice: Math.round(cost * 1.05)
-                    });
-                }
-            }
-        });
-
-        if (items.length === 0) {
-            alert('Could not automatically detect items. Please add manually.');
-        }
-        setLineItems(items);
     };
 
     const handleUpdateItem = (id: string, field: keyof LineItem, value: any) => {

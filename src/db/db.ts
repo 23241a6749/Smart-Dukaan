@@ -31,6 +31,7 @@ export interface Customer {
   nextCallDate?: number;
   recoveryStatus?: 'Promised' | 'Call Again' | 'Busy' | 'Failed';
   recoveryNotes?: string;
+  preferredVoiceLanguage?: string;
 
   // Khata Logic Fields (Main)
   khataScore?: number;

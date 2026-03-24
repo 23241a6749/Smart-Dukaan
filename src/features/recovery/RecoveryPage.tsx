@@ -70,7 +70,8 @@ export default function RecoveryPage() {
             phone: customer.phoneNumber,
             risk: risk,
             nextCallDate: customer.nextCallDate,
-            recoveryStatus: customer.recoveryStatus
+            recoveryStatus: customer.recoveryStatus,
+            preferredVoiceLanguage: customer.preferredVoiceLanguage || 'en'
         };
     }), [viewMode, actionQueue, scheduledQueue, nowTs, t]);
 
