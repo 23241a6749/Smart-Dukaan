@@ -38,6 +38,22 @@ router.post('/', auth, async (req, res) => {
 });
 
 
+// Delete product
+router.delete('/:id', auth, async (req, res) => {
+    try {
+        const deleted = await Product.findOneAndDelete({
+            _id: req.params.id,
+            shopkeeperId: req.auth?.userId
+        });
+        if (!deleted) {
+            return res.status(404).json({ message: 'Product not found or access denied' });
+        }
+        res.json({ message: 'Product deleted successfully' });
+    } catch (err: any) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // Update product (e.g., manual stock adjustment)
 router.patch('/:id', auth, async (req, res) => {
     try {

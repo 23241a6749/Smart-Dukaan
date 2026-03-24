@@ -4,6 +4,8 @@ import { Plus, X, Save } from 'lucide-react';
 import type { Product } from '../../db/db';
 import { useTranslate } from '../../hooks/useTranslate';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import PullToRefreshIndicator from '../../components/PullToRefreshIndicator';
 
 const InventoryItemCard = React.memo(({ product, t }: { product: Product, t: any }) => (
     <div key={product._id} className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center border border-gray-100">
@@ -41,6 +43,8 @@ export const InventoryPage: React.FC = () => {
         loadProducts();
     }, [loadProducts]);
 
+    const pullState = usePullToRefresh({ onRefresh: loadProducts });
+
     const handleAddProduct = React.useCallback(async () => {
         if (!newProduct.name || !newProduct.price) return;
         try {
@@ -74,7 +78,8 @@ export const InventoryPage: React.FC = () => {
     }, [t, loadProducts]);
 
     return (
-        <div className="p-4 safe-area-bottom">
+        <div className="p-4 safe-area-bottom relative">
+            <PullToRefreshIndicator {...pullState} />
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-900">{t['Inventory Status']}</h2>
                 <span className="bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded">

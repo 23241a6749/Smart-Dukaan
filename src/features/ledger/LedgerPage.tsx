@@ -4,6 +4,8 @@ import { Receipt, Calendar, User, Tag } from 'lucide-react';
 import type { Transaction } from '../../db/db';
 import { useTranslate } from '../../hooks/useTranslate';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import PullToRefreshIndicator from '../../components/PullToRefreshIndicator';
 
 const LedgerTransactionRow = React.memo(({
     bill,
@@ -80,6 +82,8 @@ export const LedgerPage: React.FC = () => {
         loadBills();
     }, [loadBills]);
 
+    const pullState = usePullToRefresh({ onRefresh: loadBills });
+
     const filteredEntries = React.useMemo(() =>
         filterMode === 'ALL'
             ? bills
@@ -139,7 +143,8 @@ export const LedgerPage: React.FC = () => {
     }, []);
 
     return (
-        <div className="space-y-6 pb-48">
+        <div className="space-y-6 pb-48 relative">
+            <PullToRefreshIndicator {...pullState} />
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h2 className="text-3xl font-black text-gray-900 dark:text-white">{t['Shop Ledger']}</h2>

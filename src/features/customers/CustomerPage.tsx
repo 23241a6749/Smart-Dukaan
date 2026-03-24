@@ -5,6 +5,8 @@ import type { Customer } from '../../db/db';
 import { db } from '../../db/db';
 import { getKhataStatus, recalculateKhataScore } from '../../lib/khataLogic';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import PullToRefreshIndicator from '../../components/PullToRefreshIndicator';
 
 const CustomerCard = React.memo(({
   customer,
@@ -230,6 +232,8 @@ export const CustomerPage: React.FC = () => {
     loadCustomers();
   }, [loadCustomers]);
 
+  const pullState = usePullToRefresh({ onRefresh: loadCustomers });
+
 
   const getLedgerStyles = React.useCallback((balance: number) => {
     if (balance <= 500) return {
@@ -376,7 +380,8 @@ export const CustomerPage: React.FC = () => {
     ), [customers, searchTerm]);
 
   return (
-    <div className="space-y-6 pb-48">
+    <div className="space-y-6 pb-48 relative">
+      <PullToRefreshIndicator {...pullState} />
       <div className="flex justify-between items-center mb-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 dark:text-white">{t['Customers']}</h2>
