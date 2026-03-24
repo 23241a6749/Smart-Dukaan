@@ -577,9 +577,10 @@ router.post('/webhook', async (req: any, res) => {
             return;
         }
 
-        // Skip processing for empty text with no media
-        if (!rawBody && numMedia === 0) {
-            console.log(`[WhatsApp] Ignoring empty message from ${from}`);
+        // Skip processing for empty/blank text with no media (saves credits)
+        const isBlankMessage = !rawBody || rawBody.trim() === '';
+        if (isBlankMessage && numMedia === 0) {
+            console.log(`[WhatsApp] Ignoring empty/blank message from ${from}`);
             res.status(200).send(twiml.toString());
             return;
         }

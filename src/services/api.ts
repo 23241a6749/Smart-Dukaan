@@ -74,6 +74,7 @@ export const productApi = {
     getAll: () => api.get('/products'),
     create: (data: Record<string, unknown>) => api.post('/products', data),
     update: (id: string, data: Record<string, unknown>) => api.patch(`/products/${id}`, data),
+    delete: (id: string) => api.delete(`/products/${id}`),
     seed: () => api.post('/products/seed', {}),
 };
 

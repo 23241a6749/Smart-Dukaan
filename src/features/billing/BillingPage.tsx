@@ -13,6 +13,9 @@ import { Search, User, Phone, X, ChevronRight, Minus, Plus, Trash2, Award, Downl
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useTranslate } from '../../hooks/useTranslate';
+import { useProductUsage } from '../../hooks/useProductUsage';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import PullToRefreshIndicator from '../../components/PullToRefreshIndicator';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5001';
 
@@ -157,17 +160,18 @@ export const BillingPage: React.FC = () => {
     const { cart, addToCart, increaseQuantity, decreaseQuantity, updateQuantity, removeFromCart, clearCart, cartTotal } = useCart();
     const { t, language } = useLanguage();
     const { addToast } = useToast();
+    const { recordUsage, sortProducts } = useProductUsage();
     const [products, setProducts] = useState<any[]>([]);
     const translatedProducts = useTranslate(products, ['name', 'category']);
     const translatedCart = useTranslate(cart, ['name', 'unit']);
 
     const handleVoiceCommand = React.useCallback((transcript: string) => {
-        const text = transcript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").trim();
+        const text = transcript.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
         addToast(`Heard: "${text}"`, 'info');
-        
+
         const addKeywords = ['add', 'jodo', 'plus', 'add-karo', 'లగించండి', 'జోడించండి', 'యాడ్', 'చేర్చు'];
         const removeKeywords = ['remove', 'hatao', 'minus', 'delete', 'తీసేయి', 'తొలగించు'];
-        
+
         const isAdd = addKeywords.some(k => text.includes(k));
         const isRemove = removeKeywords.some(k => text.includes(k));
 
@@ -276,6 +280,12 @@ export const BillingPage: React.FC = () => {
             socket.disconnect();
         };
     }, [loadProducts, loadCustomers]);
+
+    const pullState = usePullToRefresh({
+        onRefresh: async () => {
+            await Promise.all([loadProducts(), loadCustomers()]);
+        },
+    });
 
     // Effect: Global Search
     useEffect(() => {
@@ -397,6 +407,12 @@ export const BillingPage: React.FC = () => {
         );
     }, [translatedProducts, searchTerm, selectedCategoryIndex, categories]);
 
+    const sortedProducts = React.useMemo(
+        () => sortProducts(filteredProducts),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [filteredProducts]
+    );
+
     const processTransaction = React.useCallback(async (method: 'cash' | 'online' | 'ledger') => {
         if (!selectedCustomer) return false;
 
@@ -451,6 +467,7 @@ export const BillingPage: React.FC = () => {
             }
 
             addToast(t['Transaction successful!'], 'success');
+            recordUsage(cart);
             loadProducts();
             return true;
         } catch (e: any) {
@@ -458,7 +475,7 @@ export const BillingPage: React.FC = () => {
             addToast(e.response?.data?.message || t['Transaction Failed'] || 'Transaction Failed', 'error');
             return false;
         }
-    }, [selectedCustomer, cart, cartTotal, t, addToast, loadProducts]);
+    }, [selectedCustomer, cart, cartTotal, t, addToast, loadProducts, recordUsage]);
 
     const handleCashPayment = React.useCallback(async () => {
         setAnimationType('cash');
@@ -527,6 +544,7 @@ export const BillingPage: React.FC = () => {
                         }
 
                         addToast(t['UPI Payment Successful!'], 'success');
+                        recordUsage(cart);
                         loadProducts(); // Refresh local stock
                         setIsProcessing(false);
                     } catch (verifyErr: any) {
@@ -563,7 +581,7 @@ export const BillingPage: React.FC = () => {
             setShowStatusModal(false);
             setIsProcessing(false);
         }
-    }, [selectedCustomer, cartTotal, cart, t, addToast, loadProducts]);
+    }, [selectedCustomer, cartTotal, cart, t, addToast, loadProducts, recordUsage]);
 
     const handleLedgePayment = React.useCallback(async (skipRiskConfirmation = false) => {
         if (!selectedCustomer) return;
@@ -638,6 +656,7 @@ export const BillingPage: React.FC = () => {
             }
 
             addToast(t['Udhaar Verified & Transaction Complete!'], 'success');
+            recordUsage(cart);
             setShowOtpInput(false);
             setIsProcessing(false);
             loadProducts();
@@ -652,7 +671,7 @@ export const BillingPage: React.FC = () => {
             setOtpLoading(false);
             setOtp('');
         }
-    }, [selectedCustomer, otp, cart, cartTotal, t, addToast, loadProducts]);
+    }, [selectedCustomer, otp, cart, cartTotal, t, addToast, loadProducts, recordUsage]);
 
     const handlePartialCashPayment = async (amount: number) => {
         if (!selectedCustomer) return;
@@ -900,7 +919,7 @@ export const BillingPage: React.FC = () => {
     }, []);
 
     const activeCategory = categories[selectedCategoryIndex] || 'All';
-    
+
     const gradients: any = {
         'All': 'linear-gradient(135deg, #facc15, #fb923c)',
         'Grocery': 'linear-gradient(135deg, #22c55e, #4ade80)',
@@ -921,9 +940,10 @@ export const BillingPage: React.FC = () => {
 
     return (
         <div className="flex flex-col relative bg-gray-50 dark:bg-gray-900 min-h-full">
-            {/* Search Bar */}
-            <div 
-                className="sticky top-0 p-4 space-y-3 z-30 shadow-md transition-all duration-300"
+            <PullToRefreshIndicator {...pullState} />
+            {/* Integrated Billing Bar (Scrolls with context) */}
+            <div
+                className="p-4 space-y-3 transition-all duration-300"
                 style={{ background: gradients[activeCategory] || gradients['All'] }}
             >
                 <div className="flex items-center justify-between">
@@ -982,11 +1002,10 @@ export const BillingPage: React.FC = () => {
                                 <button
                                     key={cat}
                                     onClick={() => setSelectedCategoryIndex(index)}
-                                    className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all duration-200 transform scale-100 active:scale-95 flex items-center gap-1.5 ${
-                                        selectedCategoryIndex === index
-                                            ? 'text-white shadow-lg scale-105'
-                                            : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-100 dark:border-gray-700 hover:border-gray-200 hover:-translate-y-0.5'
-                                    }`}
+                                    className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all duration-200 transform scale-100 active:scale-95 flex items-center gap-1.5 ${selectedCategoryIndex === index
+                                        ? 'text-white shadow-lg scale-105'
+                                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-100 dark:border-gray-700 hover:border-gray-200 hover:-translate-y-0.5'
+                                        }`}
                                     style={{
                                         background: selectedCategoryIndex === index ? (gradients[cat] || gradients['All']) : undefined,
                                         boxShadow: selectedCategoryIndex === index ? '0 10px 15px -3px rgba(0, 0, 0, 0.1)' : undefined
@@ -1003,19 +1022,28 @@ export const BillingPage: React.FC = () => {
             {/* Product Grid */}
             <div className="p-4 pb-48">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                    {filteredProducts?.map((product, index) => (
-                        <div key={product._id} className="animate-in fade-in slide-in-from-bottom-3 duration-300" style={{ animationDelay: `${Math.min(index * 70, 700)}ms`, animationFillMode: 'backwards' }}>
+                    {sortedProducts.map((product, index) => (
+                        <div
+                            key={product._id}
+                            className="animate-in fade-in slide-in-from-bottom-3 duration-300"
+                            style={{ animationDelay: `${Math.min(index * 60, 600)}ms`, animationFillMode: 'backwards' }}
+                        >
                             <BillingProductCard
                                 product={product}
-                            t={t}
-                            cartItem={cart.find(item => item._id === product._id)}
-                            addToCart={addToCart}
-                            increaseQuantity={increaseQuantity}
-                            decreaseQuantity={decreaseQuantity}
-                            addToast={addToast}
-                        />
+                                t={t}
+                                cartItem={cart.find(item => item._id === product._id)}
+                                addToCart={addToCart}
+                                increaseQuantity={increaseQuantity}
+                                decreaseQuantity={decreaseQuantity}
+                                addToast={addToast}
+                            />
                         </div>
                     ))}
+                    {sortedProducts.length === 0 && (
+                        <div className="col-span-2 lg:col-span-3 text-center py-20 text-gray-400">
+                            <p className="font-bold">No products found</p>
+                        </div>
+                    )}
                 </div>
             </div>
 

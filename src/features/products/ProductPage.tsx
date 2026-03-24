@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, AlertTriangle, Edit2, X, Package, Tag, Archive, BarChart2, Hash, CalendarDays, Layers } from 'lucide-react';
+import { Plus, Search, AlertTriangle, Edit2, X, Package, Tag, Archive, BarChart2, Hash, CalendarDays, Layers, Trash2, AlertOctagon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { productApi, expiryApi } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import { useTranslate } from '../../hooks/useTranslate';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
+import PullToRefreshIndicator from '../../components/PullToRefreshIndicator';
 
 interface Product {
   _id?: string;
@@ -93,6 +95,8 @@ export const ProductPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { addToast } = useToast();
   const navigate = useNavigate();
   const [formData, setFormData] = useState<Product & { expiryDate: string }>({
@@ -113,6 +117,8 @@ export const ProductPage: React.FC = () => {
     loadProducts();
   }, [loadProducts]);
 
+  const pullState = usePullToRefresh({ onRefresh: loadProducts });
+
   const handleSave = React.useCallback(async () => {
     if (!formData.name || formData.price <= 0 || formData.stock < 0) {
       addToast('Please fill all fields correctly', 'error');
@@ -127,7 +133,7 @@ export const ProductPage: React.FC = () => {
         // Create product first
         const productResponse = await productApi.create(formData as any);
         const productId = productResponse.data._id;
-        
+
         // If expiry date is provided, create an inventory batch with expiry
         if (formData.expiryDate) {
           try {
@@ -156,6 +162,25 @@ export const ProductPage: React.FC = () => {
       addToast('Failed to save product', 'error');
     }
   }, [formData, editingId, addToast, loadProducts]);
+
+  const handleDelete = React.useCallback(async () => {
+    if (!editingId) return;
+    setIsDeleting(true);
+    try {
+      await productApi.delete(editingId);
+      addToast('Product deleted successfully', 'success');
+      setFormData({ name: '', price: 0, stock: 0, minStock: 5, category: '', icon: '📦', unit: 'piece', expiryDate: '' });
+      setEditingId(null);
+      setShowDeleteConfirm(false);
+      setShowForm(false);
+      loadProducts();
+    } catch (err: any) {
+      console.error('Failed to delete product', err);
+      addToast(err?.response?.data?.message || 'Failed to delete product. Please try again.', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [editingId, addToast, loadProducts]);
 
   const startEdit = React.useCallback((product: Product) => {
     setEditingId(product._id!);
@@ -187,7 +212,8 @@ export const ProductPage: React.FC = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-48">
+    <div className="space-y-6 max-w-5xl mx-auto pb-48 relative">
+      <PullToRefreshIndicator {...pullState} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -337,24 +363,24 @@ export const ProductPage: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-56 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full pr-1 px-1">
                   {CATEGORIES.map(c => {
                     const icons: any = {
-                        'Grocery': '🛒', 'Dairy': '🥛', 'Bakery': '🍞', 'Beverages': '🧃', 'Snacks': '🍿',
-                        'Fruits & Vegetables': '🍎', 'Meat & Seafood': '🥩', 'Frozen Foods': '🧊',
-                        'Personal Care': '🧴', 'Household': '🧹', 'Stationery': '✏️', 'Electronics': '🔌', 'Other': '📦'
+                      'Grocery': '🛒', 'Dairy': '🥛', 'Bakery': '🍞', 'Beverages': '🧃', 'Snacks': '🍿',
+                      'Fruits & Vegetables': '🍎', 'Meat & Seafood': '🥩', 'Frozen Foods': '🧊',
+                      'Personal Care': '🧴', 'Household': '🧹', 'Stationery': '✏️', 'Electronics': '🔌', 'Other': '📦'
                     };
                     const gradients: any = {
-                        'Grocery': 'from-green-500 to-green-400',
-                        'Dairy': 'from-blue-500 to-blue-400',
-                        'Bakery': 'from-amber-500 to-yellow-500',
-                        'Beverages': 'from-cyan-500 to-cyan-400',
-                        'Snacks': 'from-red-500 to-pink-500',
-                        'Fruits & Vegetables': 'from-green-600 to-emerald-500',
-                        'Meat & Seafood': 'from-red-600 to-rose-500',
-                        'Frozen Foods': 'from-sky-500 to-blue-400',
-                        'Personal Care': 'from-purple-500 to-fuchsia-400',
-                        'Household': 'from-slate-500 to-gray-400',
-                        'Stationery': 'from-orange-500 to-amber-500',
-                        'Electronics': 'from-slate-800 to-gray-700',
-                        'Other': 'from-gray-400 to-slate-400'
+                      'Grocery': 'from-green-500 to-green-400',
+                      'Dairy': 'from-blue-500 to-blue-400',
+                      'Bakery': 'from-amber-500 to-yellow-500',
+                      'Beverages': 'from-cyan-500 to-cyan-400',
+                      'Snacks': 'from-red-500 to-pink-500',
+                      'Fruits & Vegetables': 'from-green-600 to-emerald-500',
+                      'Meat & Seafood': 'from-red-600 to-rose-500',
+                      'Frozen Foods': 'from-sky-500 to-blue-400',
+                      'Personal Care': 'from-purple-500 to-fuchsia-400',
+                      'Household': 'from-slate-500 to-gray-400',
+                      'Stationery': 'from-orange-500 to-amber-500',
+                      'Electronics': 'from-slate-800 to-gray-700',
+                      'Other': 'from-gray-400 to-slate-400'
                     };
                     const isSelected = formData.category === c;
 
@@ -385,6 +411,21 @@ export const ProductPage: React.FC = () => {
                   />
                 </div>
               </FormField>
+
+              {/* Delete Danger Zone — only visible when editing */}
+              {editingId && (
+                <div className="border-t border-dashed border-red-100 pt-5">
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={isDeleting}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-black text-red-500 bg-red-50 hover:bg-red-100 active:scale-95 transition-all text-sm disabled:opacity-50"
+                  >
+                    <Trash2 size={15} />
+                    Delete this product
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}
@@ -400,6 +441,47 @@ export const ProductPage: React.FC = () => {
                 className="flex-[2] bg-primary-green text-white py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-green-200 hover:brightness-105 active:scale-95 transition-all"
               >
                 {editingId ? 'Update Product' : 'Add to Inventory'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200 p-8 flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-5">
+              <AlertOctagon className="text-red-500" size={32} />
+            </div>
+            <h3 className="text-xl font-black text-gray-900 mb-2">Delete Product?</h3>
+            <p className="text-sm text-gray-500 font-medium mb-6">
+              Are you sure you want to delete <span className="font-black text-gray-800">{formData.name}</span>? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="flex-1 py-3 rounded-2xl font-black text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="flex-1 py-3 rounded-2xl font-black text-white bg-red-500 hover:bg-red-600 transition-colors text-sm shadow-lg shadow-red-200 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    Yes, Delete
+                  </>
+                )}
               </button>
             </div>
           </div>
