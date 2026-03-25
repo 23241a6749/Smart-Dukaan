@@ -16,47 +16,66 @@ router.post('/register', async (req, res) => {
     try {
         const { name, username, email, password, phoneNumber } = req.body;
 
+        // Validate required fields
+        if (!name || !email || !password) {
+            return res.status(400).json({ message: 'Name, email, and password are required' });
+        }
+
         // Check if user exists
-        const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+        const orConditions: any[] = [{ email }];
+        if (username) orConditions.push({ username });
+        const existingUser = await User.findOne({ $or: orConditions });
         if (existingUser) {
             return res.status(400).json({ message: 'Username or Email already exists' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const normalizedPhone = phoneNumber ? (phoneNumber.startsWith('+91') ? phoneNumber : '+91' + phoneNumber.replace(/\D/g, '').slice(-10)) : undefined;
+        const normalizedPhone = phoneNumber
+            ? (phoneNumber.startsWith('+91') ? phoneNumber : '+91' + phoneNumber.replace(/\D/g, '').slice(-10))
+            : undefined;
+
         const user = await User.create({
             name,
-            username,
+            username: username || undefined,
             email,
             password: hashedPassword,
-            phoneNumber: normalizedPhone
+            phoneNumber: normalizedPhone,
         });
 
         const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
 
-        // Seed initial products for the new shopkeeper
-        let sourceProducts: any[] = await GlobalProduct.find().lean();
-
-        if (sourceProducts.length === 0) {
-            console.log('No GlobalProducts found in DB, falling back to starterProducts file');
-            sourceProducts = starterProducts;
+        // Seed initial products — non-fatal if it fails
+        try {
+            let sourceProducts: any[] = await GlobalProduct.find().lean();
+            if (sourceProducts.length === 0) {
+                console.log('[Register] No GlobalProducts in DB, using starterProducts fallback');
+                sourceProducts = starterProducts;
+            }
+            const initialProducts = sourceProducts.map((p: any) => ({
+                shopkeeperId: user._id,
+                name: p.name,
+                price: p.price,
+                stock: p.stock,
+                category: p.category,
+                unit: p.unit,
+                icon: p.icon,
+            }));
+            await Product.insertMany(initialProducts);
+        } catch (seedErr) {
+            console.error('[Register] Product seeding failed (non-fatal):', seedErr);
         }
 
-        const initialProducts = sourceProducts.map(p => ({
-            shopkeeperId: user._id,
-            name: p.name,
-            price: p.price,
-            stock: p.stock,
-            category: p.category,
-            unit: p.unit,
-            icon: p.icon
-        }));
-
-        await Product.insertMany(initialProducts);
-
-        res.status(201).json({ token, user: { id: user._id, name: user.name, username: user.username, email: user.email } });
-    } catch (err) {
-        res.status(500).json({ message: 'Server error' });
+        res.status(201).json({
+            token,
+            user: { id: user._id, name: user.name, username: user.username, email: user.email },
+        });
+    } catch (err: any) {
+        console.error('[Register] Error:', err);
+        const message =
+            err.code === 11000
+                ? 'An account with this email or username already exists'
+                : err.message || 'Server error';
+        res.status(500).json({ message });
     }
 });
 
@@ -77,8 +96,9 @@ router.post('/login', async (req, res) => {
 
         const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: { id: user._id, name: user.name, username: user.username, email: user.email } });
-    } catch (err) {
-        res.status(500).json({ message: 'Server error' });
+    } catch (err: any) {
+        console.error('[Login] Error:', err);
+        res.status(500).json({ message: err.message || 'Server error' });
     }
 });
 
@@ -92,10 +112,7 @@ router.get('/google', passport.authenticate('google', {
 router.get('/google/callback',
     passport.authenticate('google', { failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:5174'}/login?error=auth_failed`, session: false }),
     (req: any, res) => {
-        // Successful authentication
         const token = jwt.sign({ userId: req.user._id }, JWT_SECRET, { expiresIn: '7d' });
-        // Redirect to frontend with token in URL (simple for hackathons)
-        // In production, use cookies or a secure way
         res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5174'}/auth-success?token=${token}`);
     }
 );
@@ -182,7 +199,6 @@ router.delete('/delete-account', async (req, res) => {
         const user = await User.findById(decoded.userId);
         if (!user) return res.status(404).json({ message: 'User not found' });
 
-        // If user has a password (manual auth), verify it
         if (user.password) {
             const isMatch = await bcrypt.compare(password, user.password);
             if (!isMatch) {
@@ -190,11 +206,7 @@ router.delete('/delete-account', async (req, res) => {
             }
         }
 
-        // Delete user data (cascade manually if needed, for now just user)
-        // Ideally we delete products, customers, bills etc. linked to this user
-        // But for MVP just deleting user logic
         await Product.deleteMany({ shopkeeperId: user._id });
-        // await Customer.deleteMany({ shopkeeperId: user._id }); // If strictly private
         await User.findByIdAndDelete(decoded.userId);
 
         res.json({ message: 'Account deleted successfully' });

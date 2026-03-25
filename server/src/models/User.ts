@@ -13,10 +13,9 @@ const userSchema = new mongoose.Schema({
         type: {
             type: String,
             enum: ['Point'],
-            default: 'Point'
         },
         coordinates: {
-            type: [Number], // [longitude, latitude]
+            type: [Number],
             default: undefined
         }
     },
@@ -32,7 +31,7 @@ const userSchema = new mongoose.Schema({
     supportedVoiceLanguages: { type: [String], default: ['en', 'hi', 'te'] }
 }, { timestamps: true });
 
-// Add geospatial index for efficient location queries
-userSchema.index({ location: '2dsphere' });
+// Sparse 2dsphere index — only indexes users that have actual coordinates
+userSchema.index({ location: '2dsphere' }, { sparse: true });
 
 export const User = mongoose.model('User', userSchema);
