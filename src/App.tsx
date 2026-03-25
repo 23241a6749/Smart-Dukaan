@@ -1,7 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { MainLayout } from './components/layout/MainLayout';
 import GroupBuyPage from './features/deals/GroupBuyPage';
-import { BillingPage } from './features/billing/BillingPage';
 import { KhataPage } from './features/khata/KhataPage';
 import { InventoryPage } from './features/inventory/InventoryPage';
 import { CustomerPage } from './features/customers/CustomerPage';
@@ -17,9 +15,14 @@ import { CartProvider } from './contexts/CartContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
-import AuthPage from './features/auth/AuthPage';
 import AuthSuccess from './features/auth/AuthSuccess';
 import ProtectedRoute from './components/ProtectedRoute';
+
+import Landing from './pages/Landing';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import DashboardLayout from './pages/Dashboard/DashboardLayout';
+import Home from './pages/Dashboard/Home';
 
 function App() {
   return (
@@ -29,15 +32,17 @@ function App() {
           <LanguageProvider>
             <BrowserRouter>
               <Routes>
-                <Route path="/login" element={<AuthPage />} />
+                <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
                 <Route path="/auth-success" element={<AuthSuccess />} />
 
-                <Route path="/" element={
+                <Route path="/app" element={
                   <ProtectedRoute>
-                    <MainLayout />
+                    <DashboardLayout />
                   </ProtectedRoute>
                 }>
-                  <Route index element={<BillingPage />} />
+                  <Route index element={<Home />} />
                   <Route path="deals" element={<GroupBuyPage />} />
                   <Route path="khata" element={<KhataPage />} />
                   <Route path="inventory" element={<InventoryPage />} />

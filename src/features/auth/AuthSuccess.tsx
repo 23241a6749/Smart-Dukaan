@@ -18,7 +18,7 @@ export default function AuthSuccess() {
             // We set a temporary loading user, the AuthProvider will fetch the real one via getMe
             login(token, { id: 'temp', name: 'User', email: 'user@example.com' });
             addToast("Google Login Successful!", "success");
-            navigate('/', { replace: true });
+            navigate('/app', { replace: true });
         } else if (!token) {
             navigate('/login', { replace: true });
         }

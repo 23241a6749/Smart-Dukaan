@@ -29,17 +29,17 @@ export const MainLayout: React.FC = () => {
     }, [darkMode]);
 
     const navLinks = [
-        { path: '/', label: t['Billing'], icon: Store },
-        { path: '/products', label: t['Products'], icon: Package },
-        { path: '/customers', label: t['Customers'], icon: Users },
-        { path: '/recovery', label: t['Recovery Agent'], icon: Phone },
-        { path: '/records', label: t['Records'], icon: BookOpen },
-        { path: '/khata', label: t['Udhaar'], icon: CreditCard },
-        { path: '/deals', label: t['Group Buy'], icon: Gift },
-        { path: '/expiry', label: t['Expiry & Waste'], icon: Package },
-        { path: '/analytics', label: t['Analytics'], icon: TrendingUp },
-        { path: '/gst', label: t['GST & ITR'], icon: Landmark },
-        { path: '/whatsapp', label: t['WhatsApp Desk'], icon: MessageCircle },
+        { path: '/app', label: t['Billing'], icon: Store },
+        { path: '/app/products', label: t['Products'], icon: Package },
+        { path: '/app/customers', label: t['Customers'], icon: Users },
+        { path: '/app/recovery', label: t['Recovery Agent'], icon: Phone },
+        { path: '/app/records', label: t['Records'], icon: BookOpen },
+        { path: '/app/khata', label: t['Udhaar'], icon: CreditCard },
+        { path: '/app/deals', label: t['Group Buy'], icon: Gift },
+        { path: '/app/expiry', label: t['Expiry & Waste'], icon: Package },
+        { path: '/app/analytics', label: t['Analytics'], icon: TrendingUp },
+        { path: '/app/gst', label: t['GST & ITR'], icon: Landmark },
+        { path: '/app/whatsapp', label: t['WhatsApp Desk'], icon: MessageCircle },
     ];
 
     return (

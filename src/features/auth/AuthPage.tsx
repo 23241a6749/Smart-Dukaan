@@ -8,8 +8,8 @@ import { useToast } from '../../contexts/ToastContext';
 
 import logo from '../../assets/logo.jpg';
 
-export default function AuthPage() {
-    const [isLogin, setIsLogin] = useState(true);
+export default function AuthPage({ defaultIsLogin = true }: { defaultIsLogin?: boolean }) {
+    const [isLogin, setIsLogin] = useState(defaultIsLogin);
     const [loading, setLoading] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
@@ -40,7 +40,7 @@ export default function AuthPage() {
 
             login(response.data.token, response.data.user);
             addToast(`Welcome back, ${response.data.user.name}!`, "success");
-            navigate('/');
+            navigate('/app');
         } catch (err: any) {
             addToast(err.response?.data?.message || "Authentication failed", "error");
         } finally {
