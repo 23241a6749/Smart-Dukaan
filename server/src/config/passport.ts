@@ -32,6 +32,7 @@ passport.use(new GoogleStrategy({
                 // Allow sign up from Google
                 user = await User.create({
                     googleId: profile.id,
+                    username: "user_" + profile.id.slice(-8) + Math.floor(Math.random() * 1000), // Unique fallback username
                     name: profile.displayName,
                     email: email,
                     avatar: profile.photos?.[0].value
@@ -47,6 +48,7 @@ passport.use(new GoogleStrategy({
         }
         return done(null, user);
     } catch (err) {
+        console.error("GOOGLE AUTH ERROR:", err);
         return done(err as Error, undefined);
     }
 }));

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Play } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const slides = [
   {
@@ -35,6 +36,7 @@ const slides = [
 const HeroSection = () => {
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (paused) return;
@@ -87,10 +89,10 @@ const HeroSection = () => {
             {slide.desc}
           </p>
           <div className="flex flex-wrap gap-4 animate-fade-in">
-            <Button size="lg" className="gap-2">
+            <Button size="lg" className="gap-2" onClick={() => navigate('/signup')}>
               {slide.cta1} <ArrowRight className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="lg" className="gap-2 border-white/20 bg-transparent text-white hover:bg-white/10">
+            <Button variant="outline" size="lg" className="gap-2 border-white/20 bg-transparent text-white hover:bg-white/10" onClick={() => window.open(`https://www.youtube.com/watch?v=${slide.videoId}`, '_blank')}>
               <Play className="w-4 h-4" /> {slide.cta2}
             </Button>
           </div>
