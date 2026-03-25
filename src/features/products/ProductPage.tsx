@@ -18,6 +18,7 @@ interface Product {
   icon: string;
   unit: string;
   expiryDate?: string;
+  batches?: any[];
 }
 
 const CATEGORIES = [
@@ -37,17 +38,49 @@ const UNITS = [
 ];
 
 const ProductCard = React.memo(({ product, onEdit }: { product: Product, onEdit: (p: Product) => void }) => {
+  // FEFO Sort for consistency
+  const sortedBatches = product.batches ? [...product.batches].sort((a, b) => {
+    if (a.expiryDate && b.expiryDate) {
+      return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+    } else if (a.expiryDate) {
+      return -1;
+    } else if (b.expiryDate) {
+      return 1;
+    }
+    return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+  }) : [];
+
+  const activeBatch = sortedBatches[0];
+  const hasDiscount = activeBatch?.discountedPrice !== undefined && activeBatch?.quantityAvailable > 0;
+  const effectivePrice = hasDiscount ? activeBatch.discountedPrice : product.price;
+  const saveAmount = hasDiscount ? Math.max(0, product.price - activeBatch.discountedPrice) : 0;
+
+  let badgeText = '';
+  let badgeColor = 'bg-gray-100 text-gray-500';
+
+  if (hasDiscount) {
+    badgeText = saveAmount > 0 ? `Save ₹${saveAmount}` : 'Expiring Soon ⚠️';
+    badgeColor = 'bg-orange-500 text-white animate-pulse';
+  } else if (product.stock <= product.minStock) {
+    badgeText = 'Low Stock';
+    badgeColor = 'bg-red-500 text-white';
+  } else {
+    badgeText = product.category;
+  }
+
   return (
-    <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 hover:shadow-md hover:border-green-100 transition-all group">
+    <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 hover:shadow-md hover:border-green-100 transition-all group relative overflow-hidden">
       <div className="flex justify-between items-start">
         <div className="flex gap-4">
-          <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner uppercase font-black text-primary-green">
+          <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner uppercase font-black text-primary-green relative">
             {product.icon || (product.name ? product.name[0] : '📦')}
           </div>
           <div className="space-y-1">
             <div className="font-black text-gray-900 text-lg leading-tight">{product.name}</div>
             <div className="flex items-center gap-2">
-              <span className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">{product.category}</span>
+              <span className={`${badgeColor} px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors`}>
+                {badgeText}
+              </span>
               <span className="text-[10px] text-gray-300 font-black tracking-widest">{product.unit.toUpperCase()}</span>
             </div>
           </div>
@@ -63,7 +96,11 @@ const ProductCard = React.memo(({ product, onEdit }: { product: Product, onEdit:
       <div className="mt-5 flex justify-between items-end border-t border-gray-50 pt-4">
         <div>
           <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Price</div>
-          <div className="text-2xl font-black text-primary-green">₹{product.price}<span className="text-sm text-gray-400 font-bold"> / {product.unit}</span></div>
+          <div className="text-2xl font-black text-primary-green flex items-center gap-2">
+            ₹{effectivePrice}
+            {hasDiscount && <span className="text-xs text-gray-400 line-through">₹{product.price}</span>}
+            <span className="text-sm text-gray-400 font-bold"> / {product.unit}</span>
+          </div>
         </div>
         <div className="text-right">
           <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Stock</div>
@@ -212,67 +249,88 @@ export const ProductPage: React.FC = () => {
     setFormData(prev => ({ ...prev, [field]: value }));
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-48 relative">
-      <PullToRefreshIndicator {...pullState} />
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-3xl font-black text-gray-900">{t['Products']}</h2>
-          <p className="text-gray-500 text-sm font-medium">{t['Manage prices, stock, and categories'] || 'Manage prices, stock, and categories'}</p>
-        </div>
-        <button
-          onClick={() => navigate('/supplier-bills')}
-          className="bg-primary-green text-white px-6 py-3 rounded-2xl flex items-center gap-2 font-bold shadow-lg shadow-green-200 hover:brightness-105 hover:scale-105 transition-all active:scale-95"
-        >
-          <Plus size={20} /> Add Product
-        </button>
-      </div>
+    <div className="relative min-h-screen bg-white overflow-hidden">
+      {/* Glossy Yellow/Orange Background with Horizontal Fade */}
+      <div
+        className="absolute top-0 left-1/2 -translate-x-1/2 w-[400%] h-[320px] z-0 pointer-events-none transition-all duration-700"
+        style={{
+          background: 'linear-gradient(to bottom, #facc15 0%, #fb923c 240px, white 320px)'
+        }}
+      />
 
-      {/* Search + Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="md:col-span-2 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input
-            type="text"
-            placeholder="Search by name or category..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-white border-2 border-gray-100 py-4 px-12 rounded-2xl text-base font-bold text-gray-900 outline-none focus:border-primary-green transition-all shadow-sm"
-          />
-        </div>
-        <div className="bg-white p-4 rounded-2xl border-2 border-gray-100 flex items-center justify-between">
-          <div>
-            <div className="text-[10px] font-black text-gray-400 uppercase">Total Items</div>
-            <div className="text-2xl font-black text-gray-900">{products.length}</div>
+      <div className="relative z-10 space-y-8 max-w-5xl mx-auto px-4 pt-10 pb-48">
+        <PullToRefreshIndicator {...pullState} />
+
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+          <div className="animate-in fade-in slide-in-from-left duration-700">
+            <h2 className="text-4xl md:text-5xl font-black text-gray-900 tracking-tight">
+              {t['Products']}
+            </h2>
+            <p className="text-black/60 text-sm font-bold uppercase tracking-widest mt-2 bg-black/5 inline-block px-3 py-1 rounded-full backdrop-blur-sm">
+              {t['Inventory Command Center'] || 'Inventory Command Center'}
+            </p>
           </div>
-          <Archive className="text-gray-200" size={32} />
+          <button
+            onClick={() => navigate('/supplier-bills')}
+            className="w-full sm:w-auto bg-black/10 hover:bg-black/20 text-gray-900 px-8 py-4 rounded-[2rem] flex items-center justify-center gap-3 font-black transition-all hover:scale-105 active:scale-95 group border border-black/5 backdrop-blur-sm"
+          >
+            <Plus size={24} className="group-hover:rotate-90 transition-transform duration-300" />
+            {t['Add to Stock'] || 'Add to Stock'}
+          </button>
         </div>
-      </div>
 
-      {/* Low Stock Alert */}
-      {lowStockProducts.length > 0 && (
-        <div className="bg-red-50 border-2 border-red-100 p-4 rounded-2xl flex items-start gap-3">
-          <AlertTriangle className="text-red-500 mt-0.5 shrink-0" size={20} />
-          <div>
-            <div className="font-black text-red-900">Low Stock Alert!</div>
-            <div className="text-sm text-red-700 font-medium mt-0.5">
-              {lowStockProducts.length} item{lowStockProducts.length > 1 ? 's are' : ' is'} below minimum capacity. Reorder soon.
+        {/* Search & Intelligence Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-2 relative">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-400 transition-colors" size={22} />
+            <input
+              type="text"
+              placeholder={t['Search by name or category...'] || 'Search by name or category...'}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-white/95 backdrop-blur-xl border-0 ring-4 ring-transparent focus:ring-blue-500/20 py-5 px-16 rounded-[2.5rem] text-lg font-bold text-gray-900 outline-none transition-all shadow-2xl shadow-blue-900/10 placeholder-gray-400"
+            />
+          </div>
+          <div className="bg-white/95 backdrop-blur-xl p-6 rounded-[2.5rem] flex items-center justify-between shadow-2xl shadow-blue-900/10 border border-white">
+            <div>
+              <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Catalog Size</div>
+              <div className="text-3xl font-black text-gray-900">{products.length}</div>
+            </div>
+            <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center">
+              <Archive className="text-blue-600" size={32} />
             </div>
           </div>
         </div>
-      )}
 
-      {/* Product Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredProducts.map((product) => (
-          <ProductCard key={product._id} product={product} onEdit={startEdit} />
-        ))}
-        {filteredProducts.length === 0 && (
-          <div className="md:col-span-2 text-center py-20 text-gray-400">
-            <Archive size={48} className="mx-auto mb-4 opacity-30" />
-            <p className="font-bold">No products found</p>
+        {/* Alerts & Critical Notifications */}
+        {lowStockProducts.length > 0 && (
+          <div className="bg-red-500/90 backdrop-blur-xl p-5 rounded-[2.5rem] flex items-center gap-4 text-white shadow-xl animate-in shake duration-500">
+            <div className="p-3 bg-white/20 rounded-2xl">
+              <AlertTriangle className="text-white" size={24} />
+            </div>
+            <div className="flex-1">
+              <div className="font-black text-lg leading-none">Restock Required</div>
+              <div className="text-sm font-bold text-red-100 mt-1 opacity-90">
+                {lowStockProducts.length} item{lowStockProducts.length > 1 ? 's are' : ' is'} below minimum capacity.
+              </div>
+            </div>
+            <div className="h-4 w-4 bg-white rounded-full animate-ping mr-2" />
           </div>
         )}
+
+        {/* Product Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {filteredProducts.map((product) => (
+            <ProductCard key={product._id} product={product} onEdit={startEdit} />
+          ))}
+          {filteredProducts.length === 0 && (
+            <div className="md:col-span-2 text-center py-32 bg-gray-50/50 rounded-[3rem] border-4 border-dashed border-gray-100">
+              <Archive size={64} className="mx-auto mb-6 text-gray-200" />
+              <p className="font-black text-2xl text-gray-400 uppercase tracking-widest">{t['No Inventory Found'] || 'No Inventory Found'}</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Add / Edit Modal */}

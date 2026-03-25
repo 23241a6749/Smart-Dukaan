@@ -279,16 +279,13 @@ router.get('/customers/:productId', auth, async (req, res) => {
             return;
         }
 
-        const { productId } = req.params;
         const { limit = 20 } = req.query;
 
-        const productIdObj = Array.isArray(productId) ? productId[0] : productId;
-        
-        const recentBuyers = await Bill.aggregate([
+        // FETCH ALL SHOP CUSTOMERS (not just those who bought this product)
+        const shopCustomers = await Bill.aggregate([
             {
                 $match: {
-                    shopkeeperId: new mongoose.Types.ObjectId(shopkeeperId),
-                    'items.productId': new mongoose.Types.ObjectId(productIdObj)
+                    shopkeeperId: new mongoose.Types.ObjectId(shopkeeperId)
                 }
             },
             { $sort: { createdAt: -1 } },
@@ -323,7 +320,7 @@ router.get('/customers/:productId', auth, async (req, res) => {
             }
         ]);
 
-        res.json(recentBuyers);
+        res.json(shopCustomers);
     } catch (error: any) {
         res.status(500).json({ message: error.message || 'Failed to fetch customers' });
     }
@@ -337,9 +334,9 @@ router.post('/notify-customers', auth, async (req, res) => {
             return;
         }
 
-        const { productId, discountCode, message, expiryDays } = req.body || {};
-        if (!productId || !discountCode) {
-            res.status(400).json({ message: 'productId and discountCode are required' });
+        const { productId, discountedPrice, message, expiryDays } = req.body || {};
+        if (!productId || discountedPrice === undefined) {
+            res.status(400).json({ message: 'productId and discountedPrice are required' });
             return;
         }
 
@@ -349,16 +346,16 @@ router.post('/notify-customers', auth, async (req, res) => {
             return;
         }
 
-        const recentBuyers = await Bill.aggregate([
+        // FETCH ALL SHOP CUSTOMERS (anyone who ever bought from this shop)
+        const targetCustomers = await Bill.aggregate([
             {
                 $match: {
-                    shopkeeperId: new mongoose.Types.ObjectId(shopkeeperId),
-                    'items.productId': new mongoose.Types.ObjectId(productId)
+                    shopkeeperId: new mongoose.Types.ObjectId(shopkeeperId)
                 }
             },
             { $sort: { createdAt: -1 } },
             { $group: { _id: '$customerId' } },
-            { $limit: 50 },
+            { $limit: 100 }, // Expanded limit for shop-wide broadcast
             {
                 $lookup: {
                     from: 'customers',
@@ -371,19 +368,16 @@ router.post('/notify-customers', auth, async (req, res) => {
             { $match: { 'customer.phoneNumber': { $exists: true, $ne: '' } } }
         ]);
 
-        const defaultMessage = `🔥 Special Offer on ${product.name}! 
-🔥 ${expiryDays || 3} days left before expiry!
+        const defaultMessage = `⚠️ Special Sale at Smart Dukaan! 
+${product.name} is now available at ₹${discountedPrice} (was ₹${product.price || 'N/A'}). 
 
-Use code: ${discountCode}
-Get ${discountCode.includes('15') ? '15%' : '10%'} OFF on your next purchase!
-
-Valid for limited time only. Hurry!`;
+Head to the shop now to grab this deal!`;
 
         let sent = 0;
         let failed = 0;
 
-        for (const buyer of recentBuyers) {
-            const phone = buyer.customer.phoneNumber;
+        for (const target of targetCustomers) {
+            const phone = target.customer.phoneNumber;
             if (phone && typeof phone === 'string') {
                 const result = await sendGenericMessage(phone, message || defaultMessage, 'whatsapp');
                 if (result === 'delivered') sent++;
@@ -395,7 +389,7 @@ Valid for limited time only. Hurry!`;
             success: true,
             sent,
             failed,
-            total: recentBuyers.length
+            total: targetCustomers.length
         });
     } catch (error: any) {
         res.status(500).json({ message: error.message || 'Failed to notify customers' });

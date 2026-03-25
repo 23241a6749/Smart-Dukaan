@@ -3,6 +3,7 @@ import type { Product } from '../db/db';
 
 export interface CartItem extends Product {
     quantity: number;
+    batches?: any[];
 }
 
 interface CartContextType {
@@ -107,7 +108,42 @@ const CartController: React.FC<{ children: ReactNode }> = ({ children }) => {
 
     const clearCart = () => setCart([]);
 
-    const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const cartTotal = cart.reduce((sum, item) => {
+        if (!item.batches || item.batches.length === 0) {
+            return sum + (item.price * item.quantity);
+        }
+
+        const sortedBatches = [...item.batches].sort((a, b) => {
+            if (a.expiryDate && b.expiryDate) {
+                return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+            } else if (a.expiryDate) {
+                return -1;
+            } else if (b.expiryDate) {
+                return 1;
+            }
+            return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        });
+
+        let remainingQty = item.quantity;
+        let itemTotal = 0;
+
+        for (const batch of sortedBatches) {
+            if (remainingQty <= 0) break;
+            const useQty = Math.min(batch.quantityAvailable || 0, remainingQty);
+            if (useQty <= 0) continue;
+
+            const effectivePrice = batch.discountedPrice !== undefined ? batch.discountedPrice : item.price;
+            itemTotal += effectivePrice * useQty;
+            remainingQty -= useQty;
+        }
+
+        // Handle any remaining quantity not covered by batches (fallback to base price)
+        if (remainingQty > 0) {
+            itemTotal += item.price * remainingQty;
+        }
+
+        return sum + itemTotal;
+    }, 0);
 
     return (
         <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, increaseQuantity, decreaseQuantity, clearCart, cartTotal }}>

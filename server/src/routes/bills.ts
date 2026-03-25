@@ -54,8 +54,7 @@ async function createBillInternal(session: mongoose.ClientSession, data: any, us
         if (!product) throw new Error(`Product ${item.productId} not found`);
         if (product.stock < item.quantity) throw new Error(`Insufficient stock for ${product.name}`);
 
-        await consumeProductStockFEFO(userId, String(product._id), item.quantity, { session });
-        const refreshedProduct = await Product.findById(item.productId).session(session);
+        const { usedBatches, product: refreshedProduct, computedPrice } = await consumeProductStockFEFO(userId, String(product._id), item.quantity, { session });
         if (!refreshedProduct) throw new Error(`Product ${item.productId} not found`);
 
         // Auto-classify for GST if missing on product
@@ -68,13 +67,15 @@ async function createBillInternal(session: mongoose.ClientSession, data: any, us
         }
         await refreshedProduct.save({ session });
 
-        totalAmount += refreshedProduct.price * item.quantity;
+        totalAmount += computedPrice;
+        const effectiveUnitPrice = computedPrice / item.quantity;
 
         processedItems.push({
             productId: refreshedProduct._id,
             name: refreshedProduct.name,
             quantity: item.quantity,
-            price: refreshedProduct.price
+            price: effectiveUnitPrice,
+            batches: usedBatches,
         });
 
         gstRawItems.push({
@@ -83,7 +84,7 @@ async function createBillInternal(session: mongoose.ClientSession, data: any, us
             hsnCode: (refreshedProduct.get('hsnCode') as string) || '0000',
             gstRate: (refreshedProduct.get('gstRate') as number) || 0,
             quantity: item.quantity,
-            unitPrice: refreshedProduct.price,
+            unitPrice: effectiveUnitPrice,
             priceIncludesGST: true
         });
     }

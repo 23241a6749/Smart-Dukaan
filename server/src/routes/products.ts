@@ -1,14 +1,36 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { Product } from '../models/Product.js';
 import { auth } from '../middleware/auth.js';
 import { classifyProduct } from '../services/gstClassification.js';
 
 const router = express.Router();
 
-// Get all products
+// Get all products with active batches
 router.get('/', auth, async (req, res) => {
     try {
-        const products = await Product.find({ shopkeeperId: req.auth?.userId });
+        const shopkeeperId = req.auth?.userId;
+        const products = await Product.aggregate([
+            { $match: { shopkeeperId: new mongoose.Types.ObjectId(shopkeeperId) } },
+            {
+                $lookup: {
+                    from: 'inventorybatches',
+                    let: { productId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: { $eq: ['$productId', '$$productId'] },
+                                shopkeeperId: new mongoose.Types.ObjectId(shopkeeperId),
+                                status: { $in: ['active', 'expired'] },
+                                quantityAvailable: { $gt: 0 }
+                            }
+                        },
+                        { $sort: { expiryDate: 1, createdAt: -1 } }
+                    ],
+                    as: 'batches'
+                }
+            }
+        ]);
         res.json(products);
     } catch (err: any) {
         res.status(500).json({ message: err.message });

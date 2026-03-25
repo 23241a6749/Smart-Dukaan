@@ -271,6 +271,7 @@ export interface ExpiryQueueItem {
         expiryDate?: string;
         quantityAvailable: number;
         costPricePerUnit?: number;
+        discountedPrice?: number;
     };
 }
 
@@ -325,6 +326,8 @@ export const expiryApi = {
     updateAction: (id: string, data: { actionStatus: string; actionMeta?: Record<string, unknown> }) =>
         api.patch(`/expiry/actions/${id}`, data),
     getKPI: () => api.get<{ products: number; openRisks: number; atRiskValue: number }>('/expiry/kpi'),
+    applyBatchDiscount: (id: string, data: { discountType?: 'percentage' | 'fixed'; discountValue?: number; remove?: boolean }) =>
+        api.post<{ success: boolean; discountedPrice: number }>(`/expiry/batches/${id}/discount`, data),
 };
 
 export const wasteApi = {
@@ -479,12 +482,8 @@ export const discountApi = {
     getCustomers: (productId: string, limit?: number) =>
         api.get<DiscountCustomer[]>(`/discounts/customers/${productId}`, { params: { limit } }),
 
-    notifyCustomers: (data: {
-        productId: string;
-        discountCode: string;
-        message?: string;
-        expiryDays?: number;
-    }) => api.post<{ success: boolean; sent: number; failed: number; total: number }>('/discounts/notify-customers', data),
+    notifyCustomers: (data: { productId: string; discountedPrice: number; message?: string; expiryDays?: number }) =>
+        api.post<{ success: boolean; sent: number; failed: number }>('/discounts/notify-customers', data),
 };
 
 
