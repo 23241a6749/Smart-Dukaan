@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Phone, AlertCircle, X, ShieldCheck, Info, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { customerApi, ledgerApi } from '../../services/api';
 import type { Customer } from '../../db/db';
 import { db } from '../../db/db';
 import { getKhataStatus, recalculateKhataScore } from '../../lib/khataLogic';
 import { useLanguage } from '../../contexts/LanguageContext';
+
+// Single consistent card palette — warm orange/rose for udhaar context
+const CARD_PALETTE = { from: 'from-orange-400', to: 'to-rose-500', light: 'bg-orange-50', text: 'text-orange-600', ring: 'ring-orange-200' };
 
 export const KhataPage: React.FC = () => {
     const { t } = useLanguage();
@@ -182,82 +186,96 @@ export const KhataPage: React.FC = () => {
                 />
             </div>
 
-            <div className="space-y-3">
+            <motion.div
+                className="space-y-3"
+                initial="hidden"
+                animate="visible"
+                variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08 } } }}
+            >
                 {filteredCustomers.length === 0 ? (
                     <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-3xl border-2 border-dashed border-gray-100 dark:border-gray-700">
                         <CheckCircle2 size={48} className="mx-auto text-green-300 mb-2" />
                         <p className="text-gray-500 font-medium">{t['No pending udhaar found!']}</p>
                     </div>
                 ) : (
-                    filteredCustomers.map((customer) => {
-                        const styles = getLedgerStyles(customer.khataBalance);
-                        return (
-                            <div
-                                key={customer._id}
-                                onClick={() => handleViewCustomer(customer)}
-                                className="bg-white dark:bg-gray-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all active:scale-[0.99] cursor-pointer"
-                            >
-                                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                                    <div className="flex items-center gap-4">
-                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-inner ${styles.bg}`}>
-                                            {customer.name ? customer.name[0].toUpperCase() : <Phone size={24} className={styles.text} />}
-                                        </div>
-                                        <div>
-                                            <div className="font-black text-gray-900 dark:text-white text-lg flex items-center gap-2">
-                                                {customer.name || t['Unnamed Customer']}
-                                                {customer.khataBalance > 1500 && <AlertCircle size={16} className="text-red-500" />}
-                                            </div>
-                                            <div className="text-gray-500 font-medium flex items-center gap-1">
-                                                <Phone size={14} /> {customer.phoneNumber}
-                                            </div>
-                                        </div>
-                                    </div>
+                    <AnimatePresence>
+                        {filteredCustomers.map((customer) => {
+                            const palette = CARD_PALETTE;
+                            const khataStatus = khataDetails[customer.phoneNumber];
+                            return (
+                                <motion.div
+                                    key={customer._id}
+                                    variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+                                    exit={{ opacity: 0, x: -60 }}
+                                    transition={{ duration: 0.28, ease: 'easeOut' }}
+                                    whileHover={{ scale: 1.01, y: -2 }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => handleViewCustomer(customer)}
+                                    className="cursor-pointer"
+                                >
+                                    <div className={`relative overflow-hidden rounded-2xl shadow-sm border border-white/60 bg-white dark:bg-gray-800 ring-1 ${palette.ring}`}>
+                                        {/* Top accent strip */}
+                                        <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${palette.from} ${palette.to}`} />
 
-                                    <div className="grid grid-cols-2 md:flex items-center gap-4 md:gap-8">
-                                        {/* Khata Score Section */}
-                                        {khataDetails[customer.phoneNumber] && (
-                                            <div className="hidden md:block">
-                                                <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">{t['Udhaar Score']}</div>
-                                                <div className="flex items-center gap-2">
-                                                    <div className="px-2 py-1 bg-gradient-to-r from-primary-green to-blue-600 rounded-lg text-white font-black text-sm">
-                                                        {khataDetails[customer.phoneNumber].score}
-                                                    </div>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setSelectedExplainer({ ...khataDetails[customer.phoneNumber], name: customer.name });
-                                                        }}
-                                                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-                                                    >
-                                                        <Info size={14} className="text-gray-400" />
-                                                    </button>
+                                        <div className="p-4 pt-5 flex items-center gap-4">
+                                            {/* Avatar */}
+                                            <div className={`relative flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br ${palette.from} ${palette.to} flex items-center justify-center text-white text-2xl font-black shadow-md`}>
+                                                {customer.name ? customer.name[0].toUpperCase() : '?'}
+                                                {customer.khataBalance > 1500 && (
+                                                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white" />
+                                                )}
+                                            </div>
+
+                                            {/* Info */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-black text-gray-900 dark:text-white text-base truncate">
+                                                    {customer.name || t['Unnamed Customer']}
                                                 </div>
+                                                <div className="flex items-center gap-1 text-gray-400 text-xs font-medium mt-0.5">
+                                                    <Phone size={11} /> {customer.phoneNumber}
+                                                </div>
+                                                {khataStatus && (
+                                                    <div className="flex items-center gap-1.5 mt-1">
+                                                        <span className={`text-[10px] font-black uppercase tracking-wider ${palette.text}`}>Score</span>
+                                                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black bg-gradient-to-r ${palette.from} ${palette.to} text-white`}>
+                                                            {khataStatus.score}
+                                                        </span>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); setSelectedExplainer({ ...khataStatus, name: customer.name }); }}
+                                                            className="p-0.5 hover:bg-gray-100 rounded-full transition-colors"
+                                                        >
+                                                            <Info size={11} className="text-gray-400" />
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
 
-                                        <div className="text-center md:text-right order-2 md:order-1">
-                                            <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider">{t['Due Amount']}</div>
-                                            <div className={`text-2xl font-black ${styles.text}`}>₹{customer.khataBalance} <span className="text-lg opacity-50">{styles.icon}</span></div>
-                                        </div>
-                                        <div className="flex flex-col gap-1 order-1 md:order-3 text-sm text-gray-500 font-bold">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSettleModal(customer);
-                                                    setSettleAmount(customer.khataBalance);
-                                                }}
-                                                className="mt-1 text-xs bg-orange-500 text-white px-3 py-2 rounded-xl font-black uppercase tracking-tighter shadow-sm active:scale-95 transition-all flex items-center gap-1"
-                                            >
-                                                <CheckCircle2 size={14} /> {t['Settle Dues']}
-                                            </button>
+                                            {/* Right: Due amount + settle */}
+                                            <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                                <div className="text-right">
+                                                    <div className="text-[10px] text-gray-400 font-black uppercase tracking-wider">{t['Due Amount']}</div>
+                                                    <div className={`text-xl font-black ${palette.text}`}>₹{customer.khataBalance}</div>
+                                                </div>
+                                                <motion.button
+                                                    whileTap={{ scale: 0.93 }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSettleModal(customer);
+                                                        setSettleAmount(customer.khataBalance);
+                                                    }}
+                                                    className={`text-[11px] font-black uppercase tracking-tight px-3 py-1.5 rounded-xl text-white bg-gradient-to-r ${palette.from} ${palette.to} shadow-sm flex items-center gap-1`}
+                                                >
+                                                    <CheckCircle2 size={12} /> {t['Settle Dues']}
+                                                </motion.button>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-                        );
-                    })
+                                </motion.div>
+                            );
+                        })}
+                    </AnimatePresence>
                 )}
-            </div>
+            </motion.div>
 
             {/* Explainer Modal */}
             {selectedExplainer && (

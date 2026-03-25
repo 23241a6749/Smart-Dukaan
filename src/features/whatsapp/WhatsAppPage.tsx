@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import {
     Activity,
     AlertTriangle,
     Bell,
+    ChevronLeft,
     MessageCircle,
     Mic,
     Plus,
@@ -388,6 +389,14 @@ export default function WhatsAppPage() {
     };
 
     const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+    // Track if the user explicitly dismissed a conversation (back button)
+    // so the auto-select effect won't immediately re-select it
+    const userDismissedRef = useRef(false);
+
+    const handleBack = () => {
+        userDismissedRef.current = true;
+        setSelectedOrderId(null);
+    };
 
     const activeOrder = useMemo(() => translatedOrders.find(o => o._id === selectedOrderId) || null, [translatedOrders, selectedOrderId]);
 
@@ -400,13 +409,21 @@ export default function WhatsAppPage() {
     }, [translatedOrders, activeFilter]);
 
     useEffect(() => {
-        if (!selectedOrderId && filteredOrders.length > 0) {
-            setSelectedOrderId(filteredOrders[0]._id);
+        // Only auto-select on desktop or on first load (not after explicit back)
+        if (!selectedOrderId && filteredOrders.length > 0 && !userDismissedRef.current) {
+            // Only auto-select on desktop (lg breakpoint ~1024px)
+            if (window.innerWidth >= 1024) {
+                setSelectedOrderId(filteredOrders[0]._id);
+            }
+        }
+        // Reset the dismissed flag once handled
+        if (userDismissedRef.current) {
+            userDismissedRef.current = false;
         }
     }, [filteredOrders, selectedOrderId]);
 
     return (
-        <div className="flex flex-col h-[calc(100vh-100px)] -mt-2 space-y-3 px-2 sm:px-0">
+        <div className="flex flex-col h-[calc(100vh-100px)] space-y-3 px-2 sm:px-0 pt-2">
             {/* Minimal Header Stats */}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -440,8 +457,10 @@ export default function WhatsAppPage() {
             {/* Main Messaging Desk */}
             <div className="flex-1 grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-3 lg:gap-6 overflow-hidden min-h-0">
 
-                {/* Left: Conversation List */}
-                <div className="bg-white rounded-2xl lg:rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col min-h-0 overflow-hidden">
+                {/* Left: Conversation List — hidden on mobile when a conversation is open */}
+                <div className={`bg-white rounded-2xl lg:rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col min-h-0 overflow-hidden ${
+                    selectedOrderId ? 'hidden lg:flex' : 'flex'
+                }`}>
                     <div className="p-3 sm:p-6 border-b border-gray-50 bg-gray-50/30">
                         <div className="flex items-center justify-between mb-3 sm:mb-4">
                             <h3 className="font-black text-gray-900 uppercase tracking-tight text-sm sm:text-base">{t['Conversations'] || 'Conversations'}</h3>
@@ -503,13 +522,22 @@ export default function WhatsAppPage() {
                     </div>
                 </div>
 
-                {/* Right: Active Detail Panel */}
-                <div className="bg-white rounded-2xl lg:rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col overflow-hidden min-h-0">
+                {/* Right: Active Detail Panel — hidden on mobile when no order selected */}
+                <div className={`bg-white rounded-2xl lg:rounded-[2.5rem] border border-gray-100 shadow-sm flex-col overflow-hidden min-h-0 max-h-full ${
+                    selectedOrderId ? 'flex' : 'hidden lg:flex'
+                }`}>
                     {activeOrder ? (
                         <>
                             {/* Detail Panel Header */}
                             <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-gray-50 bg-gray-50/20 flex items-center justify-between flex-wrap gap-3">
                                 <div className="flex items-center gap-3 sm:gap-4">
+                                    {/* Back button — mobile only */}
+                                    <button
+                                        onClick={handleBack}
+                                        className="lg:hidden p-2 -ml-1 rounded-xl hover:bg-gray-100 transition-colors text-gray-500"
+                                    >
+                                        <ChevronLeft size={22} />
+                                    </button>
                                     <div className="w-10 sm:w-14 h-10 sm:h-14 rounded-xl sm:rounded-2xl bg-primary-green text-white flex items-center justify-center text-lg sm:text-2xl font-black shadow-lg shadow-green-100">
                                         {(activeOrder.customerId?.name || 'C')[0].toUpperCase()}
                                     </div>
@@ -536,7 +564,7 @@ export default function WhatsAppPage() {
                             </div>
 
                             {/* Detail Panel Body */}
-                            <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-6 sm:space-y-8 scrollbar-hide">
+                            <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-8 pb-32 sm:pb-10 space-y-6 sm:space-y-8 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
 
                                 {/* Raw Message Context */}
                                 <div className="space-y-3">

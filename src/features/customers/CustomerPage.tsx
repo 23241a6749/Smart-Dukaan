@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Phone, User, Users, Calendar, History, AlertCircle, X, Award, ShieldCheck, TrendingUp, Info, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { customerApi, ledgerApi } from '../../services/api';
 import type { Customer } from '../../db/db';
 import { db } from '../../db/db';
@@ -26,90 +27,123 @@ const CustomerCard = React.memo(({
   onSettle: (c: any) => void,
   formatDate: (d: any) => string,
   t: any
-}) => (
-  <div
-    onClick={() => onView(customer)}
-    className="bg-white dark:bg-gray-800 p-5 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-all active:scale-[0.99] cursor-pointer"
-  >
-    <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-      <div className="flex items-center gap-4">
-        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-inner ${styles.bg}`}>
-          {customer.name ? customer.name[0].toUpperCase() : <Phone size={24} className={styles.text} />}
-        </div>
-        <div>
-          <div className="font-black text-gray-900 dark:text-white text-lg flex items-center gap-2">
-            {customer.name || t['Unnamed Customer']}
-            {customer.khataBalance > 1500 && <AlertCircle size={16} className="text-red-500" />}
-          </div>
-          <div className="text-gray-500 font-medium flex items-center gap-1">
-            <Phone size={14} /> {customer.phoneNumber}
-          </div>
-        </div>
+}) => {
+  const x = useMotionValue(0);
+  const rightOpacity = useTransform(x, [20, 80], [0, 1]);
+  const leftOpacity = useTransform(x, [-80, -20], [1, 0]);
+
+  const handleDragEnd = (_: any, info: any) => {
+    if (info.offset.x < -80) {
+      onSettle(customer);
+    } else if (info.offset.x > 80) {
+      window.location.href = `tel:${customer.phoneNumber}`;
+    }
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-[2rem] bg-gray-50 dark:bg-gray-900 border border-transparent">
+      {/* Background Actions */}
+      <div className="absolute inset-0 flex items-center justify-between px-6 pointer-events-none">
+        <motion.div style={{ opacity: rightOpacity }} className="flex items-center gap-2 text-green-500 font-bold">
+          <Phone size={20} /> <span>{t['Call'] || 'Call'}</span>
+        </motion.div>
+        <motion.div style={{ opacity: leftOpacity }} className="flex items-center gap-2 text-orange-500 font-bold">
+          <span>{t['Settle'] || 'Settle'}</span> <CheckCircle2 size={20} />
+        </motion.div>
       </div>
 
-      <div className="grid grid-cols-2 md:flex items-center gap-4 md:gap-8">
-        {khataStatus && (
-          <div className="hidden md:block">
-            <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">{t['Udhaar Score']}</div>
-            <div className="flex items-center gap-2">
-              <div className="px-2 py-1 bg-gradient-to-r from-primary-green to-blue-600 rounded-lg text-white font-black text-sm">
-                {khataStatus.score}
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: -100, right: 100 }}
+        dragElastic={0.15}
+        onDragEnd={handleDragEnd}
+        style={{ x }}
+        whileHover={{ scale: 1.01, y: -4 }}
+        whileTap={{ scale: 0.98 }}
+        onClick={() => onView(customer)}
+        className="bg-white dark:bg-gray-800 p-5 rounded-[2rem] shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow cursor-pointer relative z-10"
+      >
+        <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-inner ${styles.bg}`}>
+              {customer.name ? customer.name[0].toUpperCase() : <Phone size={24} className={styles.text} />}
+            </div>
+            <div>
+              <div className="font-black text-gray-900 dark:text-white text-lg flex items-center gap-2">
+                {customer.name || t['Unnamed Customer']}
+                {customer.khataBalance > 1500 && <AlertCircle size={16} className="text-red-500" />}
               </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExplain({ ...khataStatus, name: customer.name });
-                }}
-                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
-              >
-                <Info size={14} className="text-gray-400" />
-              </button>
+              <div className="text-gray-500 font-medium flex items-center gap-1">
+                <Phone size={14} /> {customer.phoneNumber}
+              </div>
             </div>
           </div>
-        )}
 
-        <div className="text-center md:text-right order-2 md:order-1">
-          <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider">{t['Due Balance']}</div>
-          <div className={`text-2xl font-black ${styles.text}`}>₹{customer.khataBalance} <span className="text-lg opacity-50">{styles.icon}</span></div>
+          <div className="grid grid-cols-2 md:flex items-center gap-4 md:gap-8">
+            {khataStatus && (
+              <div className="hidden md:block">
+                <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider mb-1">{t['Udhaar Score']}</div>
+                <div className="flex items-center gap-2">
+                  <div className="px-2 py-1 bg-gradient-to-r from-primary-green to-blue-600 rounded-lg text-white font-black text-sm">
+                    {khataStatus.score}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onExplain({ ...khataStatus, name: customer.name });
+                    }}
+                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                  >
+                    <Info size={14} className="text-gray-400" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="text-center md:text-right order-2 md:order-1">
+              <div className="text-[10px] uppercase font-black text-gray-400 tracking-wider">{t['Due Balance']}</div>
+              <div className={`text-2xl font-black ${styles.text}`}>₹{customer.khataBalance} <span className="text-lg opacity-50">{styles.icon}</span></div>
+            </div>
+            <div className="flex flex-col gap-1 order-1 md:order-3 text-sm text-gray-500 font-bold">
+              <div className="flex items-center gap-2"><History size={14} className="text-primary-green" /><span>{t['Activity Log']}</span></div>
+              <div className="flex items-center gap-2"><Calendar size={14} className="text-orange-400" /><span>{formatDate(customer.lastVisit || customer.createdAt)}</span></div>
+              <div className="flex items-center gap-2"><TrendingUp size={14} className="text-orange-400" /><span>Limit: ₹{khataStatus?.limit || 3000}</span></div>
+              {customer.khataBalance > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSettle(customer);
+                  }}
+                  className="mt-1 text-xs bg-orange-500 text-white px-2 py-1 rounded-lg font-black uppercase tracking-tighter shadow-sm active:scale-95 transition-all"
+                >
+                  {t['Settle Dues']}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-1 order-1 md:order-3 text-sm text-gray-500 font-bold">
-          <div className="flex items-center gap-2"><History size={14} className="text-primary-green" /><span>{t['Activity Log']}</span></div>
-          <div className="flex items-center gap-2"><Calendar size={14} className="text-orange-400" /><span>{formatDate(customer.lastVisit || customer.createdAt)}</span></div>
-          <div className="flex items-center gap-2"><TrendingUp size={14} className="text-orange-400" /><span>Limit: ₹{khataStatus?.limit || 3000}</span></div>
-          {customer.khataBalance > 0 && (
+
+        {khataStatus && (
+          <div className="mt-4 pt-4 border-t border-gray-50 dark:border-gray-700 md:hidden flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Award size={16} className="text-primary-green" />
+              <span className="text-xs font-bold text-gray-500">Score: {khataStatus.score}</span>
+            </div>
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onSettle(customer);
+                onExplain({ ...khataStatus, name: customer.name });
               }}
-              className="mt-1 text-xs bg-orange-500 text-white px-2 py-1 rounded-lg font-black uppercase tracking-tighter shadow-sm active:scale-95 transition-all"
+              className="text-xs font-black text-primary-green uppercase tracking-tighter"
             >
-              {t['Settle Dues']}
+              Explain Logic
             </button>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </motion.div>
     </div>
-
-    {khataStatus && (
-      <div className="mt-4 pt-4 border-t border-gray-50 dark:border-gray-700 md:hidden flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Award size={16} className="text-primary-green" />
-          <span className="text-xs font-bold text-gray-500">Score: {khataStatus.score}</span>
-        </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onExplain({ ...khataStatus, name: customer.name });
-          }}
-          className="text-xs font-black text-primary-green uppercase tracking-tighter"
-        >
-          Explain Logic
-        </button>
-      </div>
-    )}
-  </div>
-));
+  );
+});
 
 const TransactionRow = React.memo(({ tx, idx, t }: { tx: any, idx: number, t: any }) => {
   const isCredit = tx.type === 'credit';
@@ -472,7 +506,15 @@ export const CustomerPage: React.FC = () => {
           />
         </div>
 
-        <div className="space-y-3">
+        <motion.div 
+          className="space-y-3"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            hidden: { opacity: 0 },
+            visible: { opacity: 1, transition: { staggerChildren: 0.08 } }
+          }}
+        >
           {filteredCustomers.length === 0 ? (
             <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-3xl border-2 border-dashed border-gray-100 dark:border-gray-700">
               <User size={48} className="mx-auto text-gray-300 mb-2" />
@@ -493,21 +535,33 @@ export const CustomerPage: React.FC = () => {
               </button>
             </div>
           ) : (
-            filteredCustomers.map((customer) => (
-              <CustomerCard
-                key={customer._id}
-                customer={customer}
-                khataStatus={khataDetails[customer.phoneNumber]}
-                styles={getLedgerStyles(customer.khataBalance)}
-                onView={handleViewCustomer}
-                onExplain={handleExplain}
-                onSettle={handleSettleTrigger}
-                formatDate={formatDate}
-                t={t}
-              />
-            ))
+            <AnimatePresence>
+              {filteredCustomers.map((customer) => (
+                <motion.div
+                  key={customer._id}
+                  variants={{
+                    hidden: { opacity: 0, y: 20 },
+                    visible: { opacity: 1, y: 0 }
+                  }}
+                  exit={{ opacity: 0, x: -50 }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  layout
+                >
+                  <CustomerCard
+                    customer={customer}
+                    khataStatus={khataDetails[customer.phoneNumber]}
+                    styles={getLedgerStyles(customer.khataBalance)}
+                    onView={handleViewCustomer}
+                    onExplain={handleExplain}
+                    onSettle={handleSettleTrigger}
+                    formatDate={formatDate}
+                    t={t}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           )}
-        </div>
+        </motion.div>
 
         {/* Explainer Modal */}
         {selectedExplainer && (

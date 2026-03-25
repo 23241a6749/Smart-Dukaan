@@ -232,10 +232,19 @@ export const MainLayout: React.FC = () => {
                                         }
                                     >
                                         {({ isActive }) => (
-                                            <>
-                                                <Icon size={24} className={isActive ? 'scale-110 -translate-y-1' : ''} />
-                                                {isActive && <div className="absolute -bottom-2 w-1 h-1 bg-primary-green rounded-full" />}
-                                            </>
+                                            <motion.div
+                                                whileTap={{ scale: 0.9 }}
+                                                className="flex flex-col items-center relative"
+                                            >
+                                                <Icon size={22} className={`transition-transform duration-300 ${isActive ? 'scale-110 -translate-y-0.5' : ''}`} />
+                                                {isActive && (
+                                                    <motion.div 
+                                                        layoutId="activeTabIndicator"
+                                                        className="absolute -bottom-2 w-1.5 h-1.5 bg-primary-green rounded-full"
+                                                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                                    />
+                                                )}
+                                            </motion.div>
                                         )}
                                     </NavLink>
                                 );
