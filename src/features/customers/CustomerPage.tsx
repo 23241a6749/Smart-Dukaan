@@ -395,7 +395,7 @@ export const CustomerPage: React.FC = () => {
         {/* Header Section */}
         <div className="flex justify-between items-center">
           <div className="animate-in fade-in slide-in-from-left duration-700">
-            <h2 className="text-4xl md:text-5xl font-black text-gray-900 tracking-tight">
+            <h2 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">
               {t['Customers']}
             </h2>
             <p className="text-black/60 text-sm font-bold uppercase tracking-widest mt-2 bg-black/5 inline-block px-3 py-1 rounded-full backdrop-blur-sm">

@@ -264,8 +264,8 @@ export const ProductPage: React.FC = () => {
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
           <div className="animate-in fade-in slide-in-from-left duration-700">
-            <h2 className="text-4xl md:text-5xl font-black text-gray-900 tracking-tight">
-              {t['Products']}
+            <h2 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">
+              {t['Products']} 📦
             </h2>
             <p className="text-black/60 text-sm font-bold uppercase tracking-widest mt-2 bg-black/5 inline-block px-3 py-1 rounded-full backdrop-blur-sm">
               {t['Inventory Command Center'] || 'Inventory Command Center'}
