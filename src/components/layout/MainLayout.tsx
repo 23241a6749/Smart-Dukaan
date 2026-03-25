@@ -223,6 +223,7 @@ export const MainLayout: React.FC = () => {
                                     <NavLink
                                         key={link.path}
                                         to={link.path}
+                                        end={link.path === '/app'}
                                         className={({ isActive }) =>
                                             `relative flex flex-col items-center justify-center transition-all ${isActive
                                                 ? 'text-primary-green'

@@ -60,14 +60,14 @@ const BillingProductCard = React.memo(({ product, t, cartItem, addToCart, increa
     }
 
     return (
-        <div className={`bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm border border-gray-50 dark:border-gray-800 flex flex-col relative transition-all duration-300 ${isOutOfStock ? 'opacity-40 grayscale-[0.5]' : 'hover:-translate-y-1 hover:shadow-xl hover:shadow-gray-200/20 dark:hover:shadow-black/20'}`}>
+        <div className={`bg-yellow-50/80 dark:bg-yellow-900/10 p-4 rounded-3xl shadow-sm border border-yellow-100/50 dark:border-yellow-900/20 flex flex-col relative transition-all duration-300 ${isOutOfStock ? 'opacity-40 grayscale-[0.5]' : 'hover:-translate-y-1 hover:shadow-xl hover:shadow-yellow-200/20 dark:hover:shadow-black/20'}`}>
             {!isOutOfStock && (
                 <div className={`absolute top-3 left-3 text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest z-10 ${badgeColor}`}>
                     {badgeText}
                 </div>
             )}
             <div className="flex-1 flex flex-col items-center justify-center py-4">
-                <div className={`text-5xl mb-3 flex items-center justify-center h-16 w-16 bg-gray-50 dark:bg-gray-700/50 rounded-2xl ${!isOutOfStock ? 'group-hover:animate-bounce mt-2' : ''}`}>{product.icon || '📦'}</div>
+                <div className={`text-5xl mb-3 flex items-center justify-center h-16 w-16 bg-white/60 dark:bg-gray-700/50 rounded-2xl ${!isOutOfStock ? 'group-hover:animate-bounce mt-2' : ''}`}>{product.icon || '🛒'}</div>
                 <span className="font-black text-gray-900 dark:text-gray-100 leading-tight text-center text-sm mb-1 line-clamp-1">{product.name}</span>
                 <span className="text-gray-900 dark:text-white font-black text-md flex items-center gap-1">
                     ₹{effectivePrice}

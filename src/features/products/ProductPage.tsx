@@ -272,7 +272,7 @@ export const ProductPage: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => navigate('/supplier-bills')}
+            onClick={() => navigate('/app/supplier-bills')}
             className="w-full sm:w-auto bg-black/10 hover:bg-black/20 text-gray-900 px-8 py-4 rounded-[2rem] flex items-center justify-center gap-3 font-black transition-all hover:scale-105 active:scale-95 group border border-black/5 backdrop-blur-sm"
           >
             <Plus size={24} className="group-hover:rotate-90 transition-transform duration-300" />

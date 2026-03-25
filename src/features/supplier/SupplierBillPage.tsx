@@ -86,7 +86,7 @@ export const SupplierBillPage: React.FC = () => {
             // Create product first
             const productResponse = await productApi.create(productForm as any);
             const productId = productResponse.data._id;
-            
+
             // If expiry date is provided, create an inventory batch with expiry
             if (productForm.expiryDate) {
                 try {
@@ -162,16 +162,16 @@ export const SupplierBillPage: React.FC = () => {
                     const canvas = document.createElement('canvas');
                     let width = img.width;
                     let height = img.height;
-                    
+
                     // Resize if needed
                     if (width > maxWidth) {
                         height = (height * maxWidth) / width;
                         width = maxWidth;
                     }
-                    
+
                     canvas.width = width;
                     canvas.height = height;
-                    
+
                     const ctx = canvas.getContext('2d');
                     if (ctx) {
                         ctx.drawImage(img, 0, 0, width, height);
@@ -194,16 +194,16 @@ export const SupplierBillPage: React.FC = () => {
         setIsProcessing(true);
         setStatusText('Preparing image...');
         setProgress(5);
-        
+
         try {
             // Compress image to reduce size (max 1024px width, 80% quality)
             const base64 = await compressImage(file, 1024, 0.8);
             setStatusText('Analyzing bill with AI...');
             setProgress(20);
-            
+
             const response = await ocrApi.scanBill({ imageBase64: base64 });
             setProgress(90);
-            
+
             if (response.data.items && response.data.items.length > 0) {
                 const items: LineItem[] = response.data.items.map((item, index) => ({
                     id: `ocr-${index}-${Date.now()}`,
@@ -248,13 +248,13 @@ export const SupplierBillPage: React.FC = () => {
                 // Compress directly from canvas
                 const base64 = canvas.toDataURL('image/jpeg', 0.7);
                 setPreviewUrl(base64);
-                
+
                 setStatusText('Analyzing bill with AI...');
                 setProgress(20);
-                
+
                 const response = await ocrApi.scanBill({ imageBase64: base64 });
                 setProgress(90);
-                
+
                 if (response.data.items && response.data.items.length > 0) {
                     const items: LineItem[] = response.data.items.map((item, index) => ({
                         id: `ocr-${index}-${Date.now()}`,
