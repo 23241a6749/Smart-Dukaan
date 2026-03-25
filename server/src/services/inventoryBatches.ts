@@ -77,7 +77,7 @@ export async function consumeProductStockFEFO(
     if (!batches.length) {
         product.stock -= quantity;
         await product.save({ session });
-        return { usedBatches: [], product };
+        return { usedBatches: [], product, computedPrice: (product.price || 0) * quantity };
     }
 
     const trackedQty = batches.reduce((sum, batch) => sum + Number(batch.quantityAvailable || 0), 0);
@@ -98,6 +98,7 @@ export async function consumeProductStockFEFO(
 
     const sorted = [...batches].sort(fefoSort);
     let remaining = quantity;
+    let computedPrice = 0;
     const usedBatches: Array<{ batchId: string; quantity: number }> = [];
 
     for (const batch of sorted) {
@@ -114,6 +115,10 @@ export async function consumeProductStockFEFO(
         }
         await batch.save({ session });
         usedBatches.push({ batchId: String(batch._id), quantity: useQty });
+
+        const effectivePrice = batch.discountedPrice ?? (product.price || 0);
+        computedPrice += effectivePrice * useQty;
+
         remaining -= useQty;
     }
 
@@ -121,7 +126,7 @@ export async function consumeProductStockFEFO(
 
     product.stock -= quantity;
     await product.save({ session });
-    return { usedBatches, product };
+    return { usedBatches, product, computedPrice };
 }
 
 export async function addStockBatch(

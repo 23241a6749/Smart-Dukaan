@@ -10,6 +10,7 @@ const inventoryBatchSchema = new mongoose.Schema({
     quantityAvailable: { type: Number, required: true, min: 0 },
     costPricePerUnit: { type: Number, min: 0 },
     sellingPriceSnapshot: { type: Number, min: 0 },
+    discountedPrice: { type: Number, min: 0 },
     supplierBillId: { type: mongoose.Schema.Types.ObjectId, ref: 'SupplierBill' },
     source: {
         type: String,

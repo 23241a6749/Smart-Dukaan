@@ -101,14 +101,13 @@ router.post('/process', auth, async (req, res) => {
                 action = 'created';
 
                 const newProduct = new Product({
+                    ...(await classifyProduct(productName)),
                     shopkeeperId: userId,
                     name: productName,
                     price: sellingPrice,
                     costPrice: costPrice,
                     stock: quantity,
                     unit: item.unit || 'unit',
-                    ...(await classifyProduct(productName)),
-
                 });
 
                 await newProduct.save();

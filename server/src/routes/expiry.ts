@@ -172,7 +172,7 @@ router.get('/queue', auth, async (req, res) => {
 
         const actions = await ExpiryAction.find(query)
             .populate('productId', 'name category unit icon price costPrice')
-            .populate('batchId', 'expiryDate quantityAvailable costPricePerUnit')
+            .populate('batchId', 'expiryDate quantityAvailable costPricePerUnit discountedPrice')
             .sort({ daysToExpiry: 1, updatedAt: -1 })
             .lean();
 
@@ -231,6 +231,58 @@ router.patch('/actions/:id', auth, async (req, res) => {
         res.json(action);
     } catch (error: any) {
         res.status(400).json({ message: error.message || 'Failed to update action' });
+    }
+});
+
+router.post('/batches/:id/discount', auth, async (req, res) => {
+    try {
+        const shopkeeperId = req.auth?.userId;
+        if (!shopkeeperId) {
+            res.status(401).json({ message: 'Authentication required' });
+            return;
+        }
+
+        const { discountType, discountValue, remove } = req.body || {};
+        const batch = await InventoryBatch.findOne({ _id: req.params.id, shopkeeperId });
+        if (!batch) {
+            res.status(404).json({ message: 'Batch not found' });
+            return;
+        }
+
+        const product = await Product.findOne({ _id: batch.productId, shopkeeperId });
+        if (!product) {
+            res.status(404).json({ message: 'Product not found' });
+            return;
+        }
+
+        if (remove) {
+            batch.discountedPrice = undefined;
+            await batch.save();
+            return res.json({ success: true, message: 'Discount removed', discountedPrice: null });
+        }
+
+        if (discountValue < 0) {
+            res.status(400).json({ message: 'Discount value cannot be negative' });
+            return;
+        }
+
+        let discountedPrice = product.price;
+        if (discountType === 'percentage') {
+            discountedPrice = Math.round(product.price * (1 - discountValue / 100));
+        } else if (discountType === 'fixed') {
+            discountedPrice = Math.max(0, product.price - discountValue);
+        }
+
+        if (discountedPrice < 0) {
+            discountedPrice = 0;
+        }
+
+        batch.discountedPrice = discountedPrice;
+        await batch.save();
+
+        res.json({ success: true, discountedPrice });
+    } catch (error: any) {
+        res.status(500).json({ message: error.message || 'Failed to apply batch discount' });
     }
 });
 

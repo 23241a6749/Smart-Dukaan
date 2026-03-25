@@ -25,19 +25,55 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://127.0.0.1:5001';
 const BillingProductCard = React.memo(({ product, t, cartItem, addToCart, increaseQuantity, decreaseQuantity, addToast }: any) => {
     const isOutOfStock = product.stock <= 0;
     const inCart = !!cartItem;
-    const marginTags = product.stock <= 3 ? 'Low Stock' : product.price > 300 ? 'Premium' : 'Popular';
+
+    // Safely sort batches by FEFO to find the absolute correct next-to-sell item
+    const sortedBatches = product.batches ? [...product.batches].sort((a, b) => {
+        if (a.expiryDate && b.expiryDate) {
+            return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+        } else if (a.expiryDate) {
+            return -1;
+        } else if (b.expiryDate) {
+            return 1;
+        }
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+    }) : [];
+
+    const activeBatch = sortedBatches[0];
+    const hasDiscount = activeBatch?.discountedPrice !== undefined && activeBatch?.quantityAvailable > 0;
+    const effectivePrice = hasDiscount ? activeBatch.discountedPrice : product.price;
+    const saveAmount = hasDiscount ? Math.max(0, product.price - activeBatch.discountedPrice) : 0;
+
+    let badgeText = '';
+    let badgeColor = 'bg-green-500 text-white';
+
+    if (hasDiscount) {
+        badgeText = saveAmount > 0 ? `Save ₹${saveAmount}` : 'Expiring Soon ⚠️';
+        badgeColor = 'bg-orange-500 text-white animate-pulse';
+    } else if (product.stock <= 3) {
+        badgeText = 'Low Stock';
+        badgeColor = 'bg-red-500 text-white';
+    } else if (product.price > 300) {
+        badgeText = 'Premium';
+        badgeColor = 'bg-gray-800 text-white';
+    } else {
+        badgeText = 'Popular';
+    }
 
     return (
         <div className={`bg-white dark:bg-gray-800 p-4 rounded-3xl shadow-sm border border-gray-50 dark:border-gray-800 flex flex-col relative transition-all duration-300 ${isOutOfStock ? 'opacity-40 grayscale-[0.5]' : 'hover:-translate-y-1 hover:shadow-xl hover:shadow-gray-200/20 dark:hover:shadow-black/20'}`}>
             {!isOutOfStock && (
-                <div className={`absolute top-3 left-3 text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest z-10 ${marginTags === 'Low Stock' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
-                    {marginTags}
+                <div className={`absolute top-3 left-3 text-[7px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest z-10 ${badgeColor}`}>
+                    {badgeText}
                 </div>
             )}
             <div className="flex-1 flex flex-col items-center justify-center py-4">
                 <div className={`text-5xl mb-3 flex items-center justify-center h-16 w-16 bg-gray-50 dark:bg-gray-700/50 rounded-2xl ${!isOutOfStock ? 'group-hover:animate-bounce mt-2' : ''}`}>{product.icon || '📦'}</div>
                 <span className="font-black text-gray-900 dark:text-gray-100 leading-tight text-center text-sm mb-1 line-clamp-1">{product.name}</span>
-                <span className="text-gray-900 dark:text-white font-black text-md">₹{product.price}<span className="text-[10px] text-gray-400">/{product.unit}</span></span>
+                <span className="text-gray-900 dark:text-white font-black text-md flex items-center gap-1">
+                    ₹{effectivePrice}
+                    {hasDiscount && <span className="text-[10px] text-gray-400 line-through">₹{product.price}</span>}
+                    <span className="text-[10px] text-gray-400">/{product.unit}</span>
+                </span>
             </div>
             {!isOutOfStock && (
                 <div className="mt-2">
@@ -61,40 +97,83 @@ const BillingProductCard = React.memo(({ product, t, cartItem, addToCart, increa
     );
 });
 
-const CheckoutCartItem = React.memo(({ item, t, increaseQuantity, decreaseQuantity, updateQuantity, removeFromCart, addToast }: any) => (
-    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-        <div className="flex justify-between items-start mb-3">
-            <div>
-                <div className="font-bold text-gray-900 dark:text-white text-lg">{item.name}</div>
-                <div className="text-gray-500 dark:text-gray-400 text-sm">₹{item.price}/{item.unit}</div>
-            </div>
-            <div className="font-bold text-lg text-gray-900 dark:text-white">₹{item.price * item.quantity}</div>
-        </div>
-        <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 bg-gray-100 dark:bg-gray-700 rounded-lg p-1 pr-3">
-                <div className="flex items-center">
-                    <button onClick={() => decreaseQuantity(item._id!)} className="w-8 h-8 bg-white dark:bg-gray-600 rounded-md flex items-center justify-center text-gray-700 dark:text-white"><Minus size={16} /></button>
-                    <input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
-                            const success = updateQuantity(item._id!, val, item.stock);
-                            if (!success) addToast(`${t['Only']} ${item.stock} ${item.unit} ${t['available']}`, 'warning');
-                        }}
-                        className="w-16 bg-transparent text-center font-bold text-gray-900 dark:text-white border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                    <button onClick={() => {
-                        const success = increaseQuantity(item._id!, item.stock);
-                        if (!success) addToast(`${t['Only']} ${item.stock} ${item.unit} ${t['available']}`, 'warning');
-                    }} className="w-8 h-8 bg-white dark:bg-gray-600 rounded-md flex items-center justify-center text-gray-700 dark:text-white"><Plus size={16} /></button>
+const CheckoutCartItem = React.memo(({ item, t, increaseQuantity, decreaseQuantity, updateQuantity, removeFromCart, addToast }: any) => {
+    // Calculate correct item total based on batches (FEFO)
+    const getEffectiveItemTotal = () => {
+        if (!item.batches || item.batches.length === 0) {
+            return item.price * item.quantity;
+        }
+
+        const sortedBatches = [...item.batches].sort((a, b) => {
+            if (a.expiryDate && b.expiryDate) {
+                return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+            } else if (a.expiryDate) return -1;
+            else if (b.expiryDate) return 1;
+            return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        });
+
+        let remainingQty = item.quantity;
+        let total = 0;
+
+        for (const batch of sortedBatches) {
+            if (remainingQty <= 0) break;
+            const useQty = Math.min(batch.quantityAvailable || 0, remainingQty);
+            if (useQty <= 0) continue;
+            const price = batch.discountedPrice !== undefined ? batch.discountedPrice : item.price;
+            total += price * useQty;
+            remainingQty -= useQty;
+        }
+        if (remainingQty > 0) total += item.price * remainingQty;
+        return total;
+    };
+
+    const subtotal = getEffectiveItemTotal();
+    const isDiscounted = subtotal < item.price * item.quantity;
+
+    return (
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+            <div className="flex justify-between items-start mb-3">
+                <div className="flex-1">
+                    <div className="font-bold text-gray-900 dark:text-white text-lg leading-tight flex items-center gap-2">
+                        {item.name}
+                        {isDiscounted && <span className="bg-indigo-100 text-indigo-600 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter">Sale Applied</span>}
+                    </div>
+                    <div className="text-gray-500 dark:text-gray-400 text-sm flex items-center gap-1.5 mt-0.5">
+                        <span className={isDiscounted ? 'line-through opacity-50' : ''}>₹{item.price}/{item.unit}</span>
+                        {isDiscounted && <span className="text-primary-green font-black tracking-tight">Avg. ₹{(subtotal / item.quantity).toFixed(1)}/{item.unit}</span>}
+                    </div>
                 </div>
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.unit}</span>
+                <div className="text-right">
+                    <div className="font-black text-xl text-gray-900 dark:text-white tracking-tighter">₹{subtotal.toLocaleString()}</div>
+                    {isDiscounted && <div className="text-[10px] text-gray-400 font-bold line-through">₹{(item.price * item.quantity).toLocaleString()}</div>}
+                </div>
             </div>
-            <button onClick={() => removeFromCart(item._id!)} className="text-danger-red p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><Trash2 size={18} /></button>
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 bg-gray-100 dark:bg-gray-700 rounded-lg p-1 pr-3">
+                    <div className="flex items-center">
+                        <button onClick={() => decreaseQuantity(item._id!)} className="w-8 h-8 bg-white dark:bg-gray-600 rounded-md flex items-center justify-center text-gray-700 dark:text-white"><Minus size={16} /></button>
+                        <input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                const success = updateQuantity(item._id!, val, item.stock);
+                                if (!success) addToast(`${t['Only']} ${item.stock} ${item.unit} ${t['available']}`, 'warning');
+                            }}
+                            className="w-16 bg-transparent text-center font-bold text-gray-900 dark:text-white border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <button onClick={() => {
+                            const success = increaseQuantity(item._id!, item.stock);
+                            if (!success) addToast(`${t['Only']} ${item.stock} ${item.unit} ${t['available']}`, 'warning');
+                        }} className="w-8 h-8 bg-white dark:bg-gray-600 rounded-md flex items-center justify-center text-gray-700 dark:text-white"><Plus size={16} /></button>
+                    </div>
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.unit}</span>
+                </div>
+                <button onClick={() => removeFromCart(item._id!)} className="text-danger-red p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><Trash2 size={18} /></button>
+            </div>
         </div>
-    </div>
-));
+    );
+});
 
 const CustomerSuggestionRow = React.memo(({ cust, t, identifyCustomer, isGlobal }: any) => (
     <button
@@ -159,7 +238,7 @@ const PaymentOptionLabel = React.memo(({ value, currentMethod, onChange, t, titl
 
 export const BillingPage: React.FC = () => {
     const { cart, addToCart, increaseQuantity, decreaseQuantity, updateQuantity, removeFromCart, clearCart, cartTotal } = useCart();
-    const { t, language } = useLanguage();
+    const { t } = useLanguage();
     const { addToast } = useToast();
     const { user } = useAuth();
     const { recordUsage, sortProducts } = useProductUsage();

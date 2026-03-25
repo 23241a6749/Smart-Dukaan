@@ -18,6 +18,7 @@ interface Product {
   icon: string;
   unit: string;
   expiryDate?: string;
+  batches?: any[];
 }
 
 const CATEGORIES = [
@@ -37,17 +38,49 @@ const UNITS = [
 ];
 
 const ProductCard = React.memo(({ product, onEdit }: { product: Product, onEdit: (p: Product) => void }) => {
+  // FEFO Sort for consistency
+  const sortedBatches = product.batches ? [...product.batches].sort((a, b) => {
+    if (a.expiryDate && b.expiryDate) {
+      return new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime();
+    } else if (a.expiryDate) {
+      return -1;
+    } else if (b.expiryDate) {
+      return 1;
+    }
+    return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+  }) : [];
+
+  const activeBatch = sortedBatches[0];
+  const hasDiscount = activeBatch?.discountedPrice !== undefined && activeBatch?.quantityAvailable > 0;
+  const effectivePrice = hasDiscount ? activeBatch.discountedPrice : product.price;
+  const saveAmount = hasDiscount ? Math.max(0, product.price - activeBatch.discountedPrice) : 0;
+
+  let badgeText = '';
+  let badgeColor = 'bg-gray-100 text-gray-500';
+
+  if (hasDiscount) {
+    badgeText = saveAmount > 0 ? `Save ₹${saveAmount}` : 'Expiring Soon ⚠️';
+    badgeColor = 'bg-orange-500 text-white animate-pulse';
+  } else if (product.stock <= product.minStock) {
+    badgeText = 'Low Stock';
+    badgeColor = 'bg-red-500 text-white';
+  } else {
+    badgeText = product.category;
+  }
+
   return (
-    <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 hover:shadow-md hover:border-green-100 transition-all group">
+    <div className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 hover:shadow-md hover:border-green-100 transition-all group relative overflow-hidden">
       <div className="flex justify-between items-start">
         <div className="flex gap-4">
-          <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner uppercase font-black text-primary-green">
+          <div className="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner uppercase font-black text-primary-green relative">
             {product.icon || (product.name ? product.name[0] : '📦')}
           </div>
           <div className="space-y-1">
             <div className="font-black text-gray-900 text-lg leading-tight">{product.name}</div>
             <div className="flex items-center gap-2">
-              <span className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">{product.category}</span>
+              <span className={`${badgeColor} px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors`}>
+                {badgeText}
+              </span>
               <span className="text-[10px] text-gray-300 font-black tracking-widest">{product.unit.toUpperCase()}</span>
             </div>
           </div>
@@ -63,7 +96,11 @@ const ProductCard = React.memo(({ product, onEdit }: { product: Product, onEdit:
       <div className="mt-5 flex justify-between items-end border-t border-gray-50 pt-4">
         <div>
           <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Price</div>
-          <div className="text-2xl font-black text-primary-green">₹{product.price}<span className="text-sm text-gray-400 font-bold"> / {product.unit}</span></div>
+          <div className="text-2xl font-black text-primary-green flex items-center gap-2">
+            ₹{effectivePrice}
+            {hasDiscount && <span className="text-xs text-gray-400 line-through">₹{product.price}</span>}
+            <span className="text-sm text-gray-400 font-bold"> / {product.unit}</span>
+          </div>
         </div>
         <div className="text-right">
           <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Stock</div>
